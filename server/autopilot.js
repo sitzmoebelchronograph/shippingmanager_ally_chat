@@ -2031,8 +2031,9 @@ async function updateAllData() {
     const stockTrend = user.stock_trend;
     const ipo = user.ipo;
     const maxAnchorPoints = gameSettings.anchor_points;
-    const totalVessels = vessels.length;
-    const availableCapacity = maxAnchorPoints - totalVessels;
+    const deliveredVessels = vessels.filter(v => v.status !== 'pending').length;
+    const pendingVessels = vessels.filter(v => v.status === 'pending').length;
+    const availableCapacity = maxAnchorPoints - deliveredVessels - pendingVessels;
 
     // Calculate pending anchor points based on anchor_next_build timestamp
     const anchorNextBuild = gameSettings.anchor_next_build || null;

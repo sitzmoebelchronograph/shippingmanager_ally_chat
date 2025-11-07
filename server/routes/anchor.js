@@ -137,13 +137,23 @@ router.post('/anchor/purchase', express.json(), async (req, res) => {
         }
 
         // Broadcast anchor update to update header (Total/Free/Pending)
-        if (gameData.data?.anchor_points) {
-          const anchorData = gameData.data.anchor_points;
+        if (gameData.data?.anchor_points !== undefined) {
+          const maxAnchorPoints = gameData.data.user_settings.anchor_points;
+          const allVessels = gameData.data.user_vessels || [];
+          const deliveredVessels = allVessels.filter(v => v.status !== 'pending').length;
+          const pendingVessels = allVessels.filter(v => v.status === 'pending').length;
+          const availableCapacity = maxAnchorPoints - deliveredVessels - pendingVessels;
+
+          // Calculate pending anchor points based on anchor_next_build timestamp
+          const anchorNextBuild = gameData.data.user_settings?.anchor_next_build || null;
+          const now = Math.floor(Date.now() / 1000);
+          const pendingAnchorPoints = (anchorNextBuild && anchorNextBuild > now) ? 1 : 0;
+
           broadcastToUser(userId, 'anchor_update', {
             anchor: {
-              max: anchorData.max || 0,
-              available: anchorData.available || 0,
-              pending: anchorData.pending || 0
+              max: maxAnchorPoints,
+              available: availableCapacity,
+              pending: pendingAnchorPoints
             }
           });
         }
