@@ -33,6 +33,7 @@ export async function showAnchorPurchaseDialog() {
   let nextBuild = moduleNextBuild;  // Use module variable
   let timerActive = false;
   let timerInterval = moduleTimerInterval;  // Use module variable
+  let badgeObserver = null;  // MutationObserver for badge changes
 
   try {
     // Fetch price data and anchor_next_build from backend (via /game/index)
@@ -54,22 +55,8 @@ export async function showAnchorPurchaseDialog() {
 
     // Render purchase form with relative positioning for overlay
       feed.innerHTML = `
-        <!-- Info section - always visible -->
-        ${vesselsAtAnchor > 0 ? `
-          <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-left: 3px solid #3b82f6; border-radius: 4px; margin-bottom: 0;">
-            <p style="margin: 0; color: #93c5fd; font-size: 14px;">
-              <strong>${vesselsAtAnchor}</strong> vessel${vesselsAtAnchor === 1 ? '' : 's'} currently at anchor
-            </p>
-          </div>
-
-          <div style="padding-top: 1px; margin-bottom: 3px;">
-            <p style="margin: 0; color: #fbbf24; font-size: 12px; line-height: 1.5;">
-              💡 <strong>Reminder:</strong> Don't forget to actually play the game and set your routes manually! 😛
-            </p>
-          </div>
-
-          <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 3px 0;">
-        ` : ''}
+        <!-- Info section - dynamically updated when badge changes -->
+        <div id="anchorInfoSection"></div>
 
         <!-- Form section - can be covered by timer -->
         <div style="position: relative;">
@@ -135,6 +122,49 @@ export async function showAnchorPurchaseDialog() {
 
       // Get Purchase button reference
       const purchaseBtn = overlay.querySelector('#anchorPurchaseBtn');
+
+      // Function to update info section based on current badge
+      function updateInfoSection() {
+        const anchorBadge = document.getElementById('anchorCount');
+        const vesselsAtAnchor = parseInt(anchorBadge?.textContent) || 0;
+        const infoSection = document.getElementById('anchorInfoSection');
+
+        if (infoSection) {
+          infoSection.innerHTML = vesselsAtAnchor > 0 ? `
+            <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-left: 3px solid #3b82f6; border-radius: 4px; margin-bottom: 0;">
+              <p style="margin: 0; color: #93c5fd; font-size: 14px;">
+                <strong>${vesselsAtAnchor}</strong> vessel${vesselsAtAnchor === 1 ? '' : 's'} currently at anchor
+              </p>
+            </div>
+
+            <div style="padding-top: 1px; margin-bottom: 3px;">
+              <p style="margin: 0; color: #fbbf24; font-size: 12px; line-height: 1.5;">
+                💡 <strong>Reminder:</strong> Don't forget to actually play the game and set your routes manually! 😛
+              </p>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 3px 0;">
+          ` : '';
+        }
+      }
+
+      // Initial update
+      updateInfoSection();
+
+      // Watch for badge changes with MutationObserver
+      badgeObserver = new MutationObserver(() => {
+        updateInfoSection();
+      });
+
+      if (anchorBadge) {
+        badgeObserver.observe(anchorBadge, {
+          childList: true,
+          characterData: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['class']
+        });
+      }
 
       // Update purchase button availability when amount is selected
       function updatePurchaseButton() {
@@ -271,6 +301,9 @@ export async function showAnchorPurchaseDialog() {
           clearInterval(timerInterval);
           moduleTimerInterval = null;
         }
+        if (badgeObserver) {
+          badgeObserver.disconnect();
+        }
         overlay.classList.add('hidden');
       });
 
@@ -354,6 +387,9 @@ export async function showAnchorPurchaseDialog() {
     if (timerInterval) {
       clearInterval(timerInterval);
       moduleTimerInterval = null;
+    }
+    if (badgeObserver) {
+      badgeObserver.disconnect();
     }
     overlay.classList.add('hidden');
   };

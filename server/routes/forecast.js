@@ -24,10 +24,10 @@ const { getLocalAppDataDir } = require('../config');
 function getForecastDataPath() {
     if (process.pkg) {
         // Running as .exe - use AppData\Local (machine-specific cache data)
-        return path.join(getLocalAppDataDir(), 'ShippingManagerCoPilot', 'data', 'forecast', 'forecast.json');
+        return path.join(getLocalAppDataDir(), 'ShippingManagerCoPilot', 'sysdata', 'forecast', 'forecast.json');
     }
     // Running from source - use project directory
-    return path.join(__dirname, '../../data/forecast/forecast.json');
+    return path.join(__dirname, '../../sysdata/forecast/forecast.json');
 }
 
 /**

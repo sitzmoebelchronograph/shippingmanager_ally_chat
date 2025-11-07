@@ -44,8 +44,8 @@ const router = express.Router();
 // Auto-depart log file path - use APPDATA when running as .exe
 const { getAppDataDir } = require('../config');
 const LOG_DIR = process.pkg
-  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot')
-  : path.join(__dirname, '../..');
+  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'logs')
+  : path.join(__dirname, '../..', 'userdata', 'logs');
 
 const AUTO_DEPART_LOG = path.join(LOG_DIR, 'auto-depart.log');
 

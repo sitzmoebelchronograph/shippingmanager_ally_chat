@@ -93,7 +93,12 @@ namespace ShippingManagerCoPilot.Installer.Logic
                 UpdateProgress(85, "Registering in Windows");
 
                 // Get version from FileVersionInfo to get actual file version string (not assembly version)
-                var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                // Use Environment.ProcessPath instead of Assembly.Location (which returns empty for single-file apps)
+                var exePath = Environment.ProcessPath;
+                if (string.IsNullOrEmpty(exePath))
+                {
+                    throw new Exception("Could not determine installer executable path for version check");
+                }
                 var fileVersionInfo = System.Diagnostics.FileVersionInfo.GetVersionInfo(exePath);
                 var version = fileVersionInfo.FileVersion;
 
@@ -173,6 +178,11 @@ namespace ShippingManagerCoPilot.Installer.Logic
             }
 
             var installerDir = Path.GetDirectoryName(installerExe);
+            if (string.IsNullOrEmpty(installerDir))
+            {
+                throw new Exception($"Could not determine installer directory from path: {installerExe}");
+            }
+
             var uninstallerDir = Path.Combine(_installPath, "Uninstaller");
 
             // Create uninstaller directory

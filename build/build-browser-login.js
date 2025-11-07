@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-const projectDir = path.join(__dirname, 'BrowserLogin');
-const helperDir = path.join(__dirname, 'helper');
+const projectDir = path.join(__dirname, '..', 'helper', 'BrowserLogin');
+const helperDir = path.join(__dirname, '..', 'helper');
 const outputExe = path.join(helperDir, 'BrowserLogin.exe');
 
 console.log('='.repeat(60));
@@ -44,7 +44,7 @@ try {
 // Restore dependencies
 console.log('[2/4] Restoring .NET dependencies...');
 try {
-    execSync('dotnet restore BrowserLogin', { stdio: 'inherit' });
+    execSync('dotnet restore helper/BrowserLogin', { stdio: 'inherit' });
     console.log('  [OK] Dependencies restored');
 } catch (error) {
     console.error('  [ERROR] Failed to restore dependencies');
@@ -54,7 +54,7 @@ try {
 // Build project with PublishSingleFile
 console.log('[3/4] Building BrowserLogin.exe...');
 try {
-    const buildCommand = 'dotnet publish BrowserLogin -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true';
+    const buildCommand = 'dotnet publish helper/BrowserLogin -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true';
     console.log(`  Running: ${buildCommand}`);
     execSync(buildCommand, { stdio: 'inherit' });
     console.log('  [OK] Build completed');

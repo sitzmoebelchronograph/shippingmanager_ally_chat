@@ -9,19 +9,22 @@ import os
 
 block_cipher = None
 
+# Get the directory containing this spec file
+spec_root = os.path.dirname(os.path.abspath(SPECPATH))
+
 a = Analysis(
-    ['start.py'],
+    ['../start.py'],
     pathex=[],
     binaries=[
-        ('dist/ShippingManagerCoPilot-Server.exe', '.'),  # Embed Node.js server exe
-        ('dist/session-selector.exe', 'helper'),  # Dialog executables with icon
-        ('dist/login-dialog.exe', 'helper'),
-        ('dist/expired-sessions-dialog.exe', 'helper'),
+        ('../dist/ShippingManagerCoPilot-Server.exe', '.'),  # Embed Node.js server exe
+        ('../dist/session-selector.exe', 'helper'),  # Dialog executables with icon
+        ('../dist/login-dialog.exe', 'helper'),
+        ('../dist/expired-sessions-dialog.exe', 'helper'),
     ],
     datas=[
-        ('public/favicon.ico', 'public'),
-        ('helper/get_session_windows.py', 'helper'),  # Only Python module (imported by start.py)
-        ('helper/__init__.py', 'helper'),
+        ('../public/favicon.ico', 'public'),
+        ('../helper/get_session_windows.py', 'helper'),  # Only Python module (imported by start.py)
+        ('../helper/__init__.py', 'helper'),
     ],
     hiddenimports=[
         'win32crypt',
@@ -70,5 +73,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.abspath('installer/icon.ico')
+    icon=os.path.join(spec_root, 'helper', 'installer', 'icon.ico')
 )

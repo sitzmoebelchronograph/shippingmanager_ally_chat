@@ -340,7 +340,7 @@ The documentation includes build instructions, installation guides, and complete
 
 ### How It Works
 
-Session cookies are stored in `data/localdata/settings/sessions.json` but **never in plaintext**. The file only contains encrypted references like `KEYRING:session_1234567`. The actual cookie values are securely stored in your operating system's credential manager.
+Session cookies are stored in `userdata/settings/sessions.json` (or `AppData/Local/ShippingManagerCoPilot/userdata/settings/sessions.json` when installed) but **never in plaintext**. The file only contains encrypted references like `KEYRING:session_1234567`. The actual cookie values are securely stored in your operating system's credential manager.
 
 ### Cross-Platform Security Backends
 

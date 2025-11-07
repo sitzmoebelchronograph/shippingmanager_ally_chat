@@ -25,12 +25,21 @@ namespace ShippingManagerCoPilot.Installer.Pages
                 var existingPath = RegistryHelper.GetInstallPath();
                 var existingVersion = RegistryHelper.GetInstalledVersion() ?? "Unknown";
 
-                // Navigate to update confirmation page instead
-                Dispatcher.BeginInvoke(new Action(() =>
+                // If registry entry exists but path is invalid, clean up registry and continue with fresh install
+                if (string.IsNullOrWhiteSpace(existingPath) || !Directory.Exists(existingPath))
                 {
-                    _mainWindow.NavigateToPage(new UpdateConfirmPage(_mainWindow, existingPath, existingVersion));
-                }));
-                return;
+                    // Corrupted registry entry - clean it up
+                    RegistryHelper.RemoveUninstallEntry();
+                }
+                else
+                {
+                    // Valid existing installation - navigate to update confirmation page
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        _mainWindow.NavigateToPage(new UpdateConfirmPage(_mainWindow, existingPath, existingVersion));
+                    }));
+                    return;
+                }
             }
 
             // Hook up license checkbox change event
@@ -117,20 +126,29 @@ namespace ShippingManagerCoPilot.Installer.Pages
         private void InstallButton_Click(object sender, RoutedEventArgs e)
         {
             // Determine selected install path
-            string installPath;
-            if (AppDataRadio.IsChecked == true)
-                installPath = AppDataPath.Text;
-            else if (ProgramFilesRadio.IsChecked == true)
-                installPath = ProgramFilesPath.Text;
-            else
-                installPath = CustomPath.Text;
+            string installPath = null;
+
+            if (AppDataRadio?.IsChecked == true)
+                installPath = AppDataPath?.Text;
+            else if (ProgramFilesRadio?.IsChecked == true)
+                installPath = ProgramFilesPath?.Text;
+            else if (CustomRadio?.IsChecked == true)
+                installPath = CustomPath?.Text;
+
+            // Fallback to AppData if nothing selected (shouldn't happen but safety check)
+            if (string.IsNullOrWhiteSpace(installPath))
+            {
+                installPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "ShippingManagerCoPilot");
+            }
 
             // Navigate to install progress page
             _mainWindow.NavigateToPage(new InstallProgressPage(
                 _mainWindow,
                 installPath,
-                DesktopShortcut.IsChecked == true,
-                StartMenuShortcut.IsChecked == true
+                DesktopShortcut?.IsChecked == true,
+                StartMenuShortcut?.IsChecked == true
             ));
         }
     }

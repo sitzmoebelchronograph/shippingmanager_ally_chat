@@ -24,8 +24,8 @@ const { getAppDataDir } = require('./config');
 
 // Get settings directory - use APPDATA when running as .exe
 const SETTINGS_DIR = process.pkg
-  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'settings')
-  : path.join(__dirname, '..', 'data', 'localdata', 'settings');
+  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'settings')
+  : path.join(__dirname, '..', 'userdata', 'settings');
 
 /**
  * Get settings file path for a specific user.

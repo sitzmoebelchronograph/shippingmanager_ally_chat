@@ -4,7 +4,7 @@
  * Session cookie is loaded from encrypted sessions.json (secure storage).
  *
  * Important configuration notes:
- * - All settings loaded from data/startup/settings.json (NO env vars)
+ * - All settings loaded from userdata/settings/settings.json (NO env vars)
  * - Rate limits are set conservatively to avoid API detection
  * - Chat refresh interval is 25 seconds (within the 29-minute price window)
  * - Session cookie provides full account access - never log or expose it
@@ -46,8 +46,8 @@ function getLocalAppDataDir() {
 
 /**
  * Get log directory path.
- * When packaged as .exe: AppData/Local/ShippingManagerCoPilot/logs/
- * When running from source: ./data/logs/
+ * When packaged as .exe: AppData/Local/ShippingManagerCoPilot/userdata/logs/
+ * When running from source: ./userdata/logs/
  * @returns {string} Log directory path
  */
 function getLogDir() {
@@ -57,15 +57,15 @@ function getLogDir() {
   if (isPkg) {
     // Running as packaged .exe - use AppData/Local
     if (process.platform === 'win32') {
-      const appDataPath = path.join(os.homedir(), 'AppData', 'Local', 'ShippingManagerCoPilot', 'logs');
+      const appDataPath = path.join(os.homedir(), 'AppData', 'Local', 'ShippingManagerCoPilot', 'userdata', 'logs');
       console.log(`[DEBUG] Using LocalAppData logs: ${appDataPath}`);
       return appDataPath;
     }
     // macOS/Linux
-    return path.join(os.homedir(), '.local', 'share', 'ShippingManagerCoPilot', 'logs');
+    return path.join(os.homedir(), '.local', 'share', 'ShippingManagerCoPilot', 'userdata', 'logs');
   }
   // Running from source - use project directory
-  const localPath = path.join(__dirname, '..', 'data', 'logs');
+  const localPath = path.join(__dirname, '..', 'userdata', 'logs');
   console.log(`[DEBUG] Using local logs: ${localPath}`);
   return localPath;
 }
@@ -94,8 +94,8 @@ function getSessionCookie() {
 
 /**
  * Get settings directory path based on execution mode.
- * - .exe mode: AppData/Local/ShippingManagerCoPilot/settings/
- * - dev mode: ./data/localdata/settings/
+ * - .exe mode: AppData/Local/ShippingManagerCoPilot/userdata/settings/
+ * - dev mode: ./userdata/settings/
  * @returns {string} Settings directory path
  */
 function getSettingsDir() {
@@ -105,15 +105,15 @@ function getSettingsDir() {
   if (isPkg) {
     // Running as packaged .exe - use AppData/Local
     if (process.platform === 'win32') {
-      const appDataPath = path.join(os.homedir(), 'AppData', 'Local', 'ShippingManagerCoPilot', 'settings');
+      const appDataPath = path.join(os.homedir(), 'AppData', 'Local', 'ShippingManagerCoPilot', 'userdata', 'settings');
       console.log(`[DEBUG] Using LocalAppData settings: ${appDataPath}`);
       return appDataPath;
     }
     // macOS/Linux
-    return path.join(os.homedir(), '.local', 'share', 'ShippingManagerCoPilot', 'settings');
+    return path.join(os.homedir(), '.local', 'share', 'ShippingManagerCoPilot', 'userdata', 'settings');
   }
-  // Running from source - use data/localdata
-  const localPath = path.join(__dirname, '..', 'data', 'localdata', 'settings');
+  // Running from source - use userdata
+  const localPath = path.join(__dirname, '..', 'userdata', 'settings');
   console.log(`[DEBUG] Using local settings: ${localPath}`);
   return localPath;
 }
@@ -172,14 +172,14 @@ const startupSettings = loadStartupSettings();
 const config = {
   /**
    * HTTPS server port from systray settings.
-   * NO DEFAULTS - always reads from data/startup/settings.json
+   * NO DEFAULTS - always reads from userdata/settings/settings.json
    * @constant {number}
    */
   PORT: startupSettings.port,
 
   /**
    * Server bind address from systray settings.
-   * NO DEFAULTS - always reads from data/startup/settings.json
+   * NO DEFAULTS - always reads from userdata/settings/settings.json
    * Default on first run: 127.0.0.1 (localhost-only for security)
    * @constant {string}
    */
@@ -245,7 +245,7 @@ const config = {
 
   /**
    * Debug mode enables verbose logging for development and troubleshooting.
-   * Loaded from data/startup/settings.json (no env vars).
+   * Loaded from userdata/settings/settings.json (no env vars).
    *
    * When enabled, logs include:
    * - Detailed API call information

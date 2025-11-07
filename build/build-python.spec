@@ -8,7 +8,7 @@ block_cipher = None
 
 # get_session_windows.py
 session_windows = Analysis(
-    ['helper/get_session_windows.py'],
+    ['../helper/get_session_windows.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -62,7 +62,7 @@ session_windows_exe = EXE(
 
 # login_dialog.py
 login_dialog = Analysis(
-    ['helper/login_dialog.py'],
+    ['../helper/login_dialog.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -99,12 +99,12 @@ login_dialog_exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='installer/icon.ico'
+    icon='../helper/installer/icon.ico'
 )
 
 # session_selector.py
 session_selector = Analysis(
-    ['helper/session_selector.py'],
+    ['../helper/session_selector.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -141,12 +141,12 @@ session_selector_exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='installer/icon.ico'
+    icon='../helper/installer/icon.ico'
 )
 
 # expired_sessions_dialog.py
 expired_sessions_dialog = Analysis(
-    ['helper/expired_sessions_dialog.py'],
+    ['../helper/expired_sessions_dialog.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -183,5 +183,5 @@ expired_sessions_dialog_exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='installer/icon.ico'
+    icon='../helper/installer/icon.ico'
 )

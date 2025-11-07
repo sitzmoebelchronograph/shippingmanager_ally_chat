@@ -78,7 +78,7 @@ namespace ShippingManagerCoPilot.Installer.Pages.Uninstall
                 // Navigate to completion page
                 Dispatcher.Invoke(() =>
                 {
-                    _mainWindow.NavigateToPage(new UninstallCompletePage(_mainWindow, _keepPersonalData));
+                    _mainWindow.NavigateToPage(new UninstallCompletePage(_mainWindow, _keepPersonalData, installPath));
                 });
             }
             catch (Exception ex)

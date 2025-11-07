@@ -54,7 +54,7 @@ const router = express.Router();
 // Centralized data directory for hijack history - use platform-specific AppData (no env vars)
 const { getAppDataDir } = require('../config');
 const APPDATA_DIR = path.join(getAppDataDir(), 'ShippingManagerCoPilot');
-const DATA_DIR = path.join(APPDATA_DIR, 'data');
+const DATA_DIR = path.join(APPDATA_DIR, 'userdata');
 
 /**
  * Migrates hijack history from old location to APPDATA.
@@ -77,7 +77,7 @@ function migrateHijackHistory() {
   }
 
   // Old location (for migration - dev mode only)
-  const OLD_DATA_DIR = path.join(__dirname, '../../data/localdata');
+  const OLD_DATA_DIR = path.join(__dirname, '../../userdata');
   const oldHistoryDir = path.join(OLD_DATA_DIR, 'hijack_history');
 
   // Check if old directory exists and has files

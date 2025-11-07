@@ -58,8 +58,8 @@ const DEBUG_MODE = config.DEBUG_MODE;
  */
 function getProcessedMessagesCachePath(userId) {
   return process.pkg
-    ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'data', 'localdata', 'chatbot', `processed_dm_messages-${userId}.json`)
-    : path.join(__dirname, '..', 'data', 'localdata', 'chatbot', `processed_dm_messages-${userId}.json`);
+    ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'chatbot', `processed_dm_messages-${userId}.json`)
+    : path.join(__dirname, '..', 'userdata', 'chatbot', `processed_dm_messages-${userId}.json`);
 }
 
 /**

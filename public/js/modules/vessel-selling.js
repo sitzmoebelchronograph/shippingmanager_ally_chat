@@ -224,10 +224,10 @@ function displaySellVessels() {
 
         ${canSell ? `
           <div class="vessel-actions">
-            <input type="number" class="vessel-quantity-input" data-model-key="${modelKey}" value="${isSelected ? selectedItem.quantity : 1}" min="1" max="${harborVessels.length}" />
+            <input type="number" class="vessel-quantity-input" data-model-key="${modelKey}" value="1" min="1" max="${harborVessels.length}" />
             <div class="vessel-action-buttons">
               <button class="vessel-select-btn${isSelected ? ' selected' : ''}" data-model-key="${modelKey}">
-                ${isSelected ? `Selected (${selectedItem.quantity}x)` : 'Select'}
+                ${isSelected ? `In Cart (${selectedItem.quantity}x)` : 'Add to Cart'}
               </button>
               <button class="vessel-buy-btn vessel-sell-now-btn" data-model-key="${modelKey}">
                 Sell Now
@@ -244,28 +244,7 @@ function displaySellVessels() {
       const quantityInput = card.querySelector('.vessel-quantity-input');
       const checkboxes = card.querySelectorAll('.vessel-checkbox');
 
-      // Checkbox change handler - update quantity input and cart
-      checkboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-          const checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
-          const checkedCount = checkedBoxes.length;
-
-          if (quantityInput) {
-            quantityInput.value = checkedCount;
-          }
-
-          // Auto-update cart when checkbox changes
-          if (checkedCount > 0) {
-            const selectedVesselIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.vesselId));
-            updateVesselSelectionInCart(modelKey, checkedCount, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice);
-          } else {
-            // Remove from cart if nothing selected
-            removeVesselSelectionFromCart(modelKey);
-          }
-        });
-      });
-
-      // Quantity input change handler - select from top to bottom and update cart
+      // Quantity input change handler - just select checkboxes (no cart update)
       if (quantityInput) {
         quantityInput.addEventListener('input', () => {
           const quantity = parseInt(quantityInput.value) || 0;
@@ -282,29 +261,20 @@ function displaySellVessels() {
           // Select first 'quantity' checkboxes (top to bottom)
           if (quantity > 0) {
             Array.from(checkboxes).slice(0, quantity).forEach(cb => cb.checked = true);
-
-            // Auto-update cart when quantity changes
-            const checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
-            const selectedVesselIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.vesselId));
-            updateVesselSelectionInCart(modelKey, quantity, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice);
-          } else {
-            // Remove from cart if quantity is 0
-            removeVesselSelectionFromCart(modelKey);
           }
         });
       }
 
       if (selectBtn) {
         selectBtn.addEventListener('click', () => {
-          let checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
+          // Get quantity from input field
+          const quantity = parseInt(quantityInput?.value) || 1;
 
-          // If nothing selected, auto-select from top based on quantity input
-          if (checkedBoxes.length === 0) {
-            const quantity = parseInt(quantityInput?.value) || 1;
-            Array.from(checkboxes).slice(0, quantity).forEach(cb => cb.checked = true);
-            checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
-          }
+          // Auto-select checkboxes based on input quantity
+          checkboxes.forEach(cb => cb.checked = false);
+          Array.from(checkboxes).slice(0, quantity).forEach(cb => cb.checked = true);
 
+          const checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
           const selectedVesselIds = Array.from(checkedBoxes).map(cb => parseInt(cb.dataset.vesselId));
 
           if (selectedVesselIds.length === 0) {
@@ -312,7 +282,9 @@ function displaySellVessels() {
             return;
           }
 
-          toggleVesselSelection(modelKey, selectedVesselIds.length, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice);
+          // Add to cart (increments if already in cart)
+          addVesselsToCart(modelKey, selectedVesselIds.length, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice);
+          showSideNotification(`Added ${selectedVesselIds.length}x ${allVessels[0].name.replace(/_\d+$/, '')} to cart`, 'success');
         });
       }
 
@@ -447,7 +419,39 @@ function toggleVesselSelection(modelKey, quantity, modelName, vesselIds, sellPri
 }
 
 /**
- * Updates vessel selection in cart (adds or updates quantity)
+ * Adds vessels to cart (increments quantity if already in cart)
+ */
+function addVesselsToCart(modelKey, quantity, modelName, vesselIds, sellPrice) {
+  const index = selectedSellVessels.findIndex(v => v.modelKey === modelKey);
+
+  if (index > -1) {
+    // Add to existing quantity
+    selectedSellVessels[index].quantity += quantity;
+    selectedSellVessels[index].vesselIds = [...selectedSellVessels[index].vesselIds, ...vesselIds];
+  } else {
+    // Add new selection
+    selectedSellVessels.push({ modelKey, quantity, modelName, vesselIds, sellPrice });
+  }
+
+  const totalCount = selectedSellVessels.reduce((sum, item) => sum + item.quantity, 0);
+  const sellCartCountEl = document.getElementById('sellCartCount');
+  const sellCartBtn = document.getElementById('sellCartBtn');
+
+  if (sellCartCountEl) sellCartCountEl.textContent = totalCount;
+  if (sellCartBtn) {
+    if (selectedSellVessels.length > 0) {
+      sellCartBtn.classList.remove('hidden');
+    } else {
+      sellCartBtn.classList.add('hidden');
+    }
+  }
+
+  // Update the select button state
+  updateSelectButtonState(modelKey, selectedSellVessels[index > -1 ? index : selectedSellVessels.length - 1].quantity);
+}
+
+/**
+ * Updates vessel selection in cart (replaces quantity - used by cart controls)
  */
 function updateVesselSelectionInCart(modelKey, quantity, modelName, vesselIds, sellPrice) {
   const index = selectedSellVessels.findIndex(v => v.modelKey === modelKey);

@@ -56,11 +56,11 @@ TARGET_COOKIE_NAME = 'shipping_manager_session'
 # Determine data directory based on execution mode
 if getattr(sys, 'frozen', False):
     # Running as .exe - use LocalAppData
-    DATA_ROOT = Path(os.environ.get('LOCALAPPDATA', os.path.expanduser('~/.local/share'))) / 'ShippingManagerCoPilot'
+    DATA_ROOT = Path(os.environ.get('LOCALAPPDATA', os.path.expanduser('~/.local/share'))) / 'ShippingManagerCoPilot' / 'userdata'
 else:
-    # Running as .py - use data/localdata
+    # Running as .py - use userdata
     SCRIPT_DIR_PARENT = Path(__file__).parent.parent
-    DATA_ROOT = SCRIPT_DIR_PARENT / 'data' / 'localdata'
+    DATA_ROOT = SCRIPT_DIR_PARENT / 'userdata'
 
 DATA_ROOT.mkdir(parents=True, exist_ok=True)
 SETTINGS_DIR = DATA_ROOT / 'settings'

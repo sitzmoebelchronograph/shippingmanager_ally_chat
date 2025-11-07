@@ -52,7 +52,7 @@ const logger = require('./utils/logger');
  */
 const { getAppDataDir } = require('./config');
 const APPDATA_DIR = path.join(getAppDataDir(), 'ShippingManagerCoPilot');
-const CERTS_DIR = path.join(APPDATA_DIR, 'certs');
+const CERTS_DIR = path.join(APPDATA_DIR, 'userdata', 'certs');
 
 // Ensure directories exist
 if (!fs.existsSync(APPDATA_DIR)) {
@@ -85,6 +85,31 @@ const CERT_PATH = path.join(CERTS_DIR, 'cert.pem');
  * @constant {string}
  */
 const KEY_PATH = path.join(CERTS_DIR, 'key.pem');
+
+/**
+ * Checks if a certificate with the given Common Name is already installed in Windows Certificate Store.
+ *
+ * @function isCertificateInstalled
+ * @param {string} commonName - Certificate Common Name to search for
+ * @returns {boolean} True if certificate is installed, false otherwise
+ */
+function isCertificateInstalled(commonName) {
+  if (os.platform() !== 'win32') {
+    return false; // Only works on Windows
+  }
+
+  try {
+    const result = spawnSync('certutil', ['-verifystore', 'Root', commonName], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    // certutil exits with code 0 if certificate found
+    return result.status === 0;
+  } catch (error) {
+    return false;
+  }
+}
 
 /**
  * Detects all non-internal IPv4 addresses from network interfaces.
@@ -203,6 +228,11 @@ function generateCA() {
 
   // Try to install CA certificate automatically on Windows
   if (os.platform() === 'win32') {
+    // Check if already installed
+    if (isCertificateInstalled('Shipping Manager CoPilot CA')) {
+      logger.log('✓ CA certificate already installed in Windows Trust Store');
+      return { cert: caPem, key: caKeyPem };
+    }
     try {
       logger.log('\n🔒 Installing CA certificate to Windows Trust Store...');
       logger.log('   (Admin rights required - UAC dialog will appear)\n');

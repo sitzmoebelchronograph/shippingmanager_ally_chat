@@ -14,11 +14,11 @@ const path = require('path');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
 
-const packageJson = require('./package.json');
+const packageJson = require('../package.json');
 const version = packageJson.version;
 
-const distFolder = path.join(__dirname, 'dist');
-const installerProject = path.join(__dirname, 'installer');
+const distFolder = path.join(__dirname, '..', 'dist');
+const installerProject = path.join(__dirname, '..', 'helper', 'installer');
 const payloadZipPath = path.join(installerProject, 'Resources', 'app-payload.zip');
 
 console.log('='.repeat(60));
@@ -54,7 +54,7 @@ try {
 // Clean previous build artifacts to prevent stale cache
 console.log('[2/6] Cleaning previous build artifacts...');
 try {
-    execSync('dotnet clean installer -c Release', { stdio: 'inherit' });
+    execSync('dotnet clean helper/installer -c Release', { stdio: 'inherit' });
     console.log('  [OK] Build artifacts cleaned');
 } catch (error) {
     console.error('  [ERROR] Failed to clean build');
@@ -64,7 +64,7 @@ try {
 // Restore dependencies
 console.log('[3/6] Restoring .NET dependencies...');
 try {
-    execSync('dotnet restore installer', { stdio: 'inherit' });
+    execSync('dotnet restore helper/installer', { stdio: 'inherit' });
     console.log('  [OK] Dependencies restored');
 } catch (error) {
     console.error('  [ERROR] Failed to restore dependencies');
@@ -75,7 +75,7 @@ try {
 console.log('[4/6] Building self-extracting installer...');
 try {
     // Pass version from package.json to MSBuild properties (no calculation, use as-is)
-    const buildCommand = `dotnet publish installer -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:FileVersion=${version} -p:AssemblyVersion=${version}`;
+    const buildCommand = `dotnet publish helper/installer -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:FileVersion=${version} -p:AssemblyVersion=${version}`;
     console.log(`  Running: ${buildCommand}`);
     execSync(buildCommand, { stdio: 'inherit' });
     console.log('  [OK] Installer built successfully');

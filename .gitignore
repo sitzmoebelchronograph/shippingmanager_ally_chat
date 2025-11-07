@@ -4,11 +4,9 @@
 # Personal configuration
 .claude
 CLAUDE.md
-data/localdata/
+userdata/
 development/
 logs/
-data/known-harbor-fee-bugs.json
-data/known-bunker-price-bugs.json
 server.pid
 sessions.json
 settings*.json
@@ -29,30 +27,32 @@ node_modules/
 package-lock.json
 
 # Python
-__pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
 
-helper/__pycache__/
 helper/api-helpers/
 
 # Build artifacts
 dist/
-build/
 *.spec
-!build-python.spec
-!build-start.spec
+!build/*.spec
+
+# Build directory - only track source files
+build/*
+!build/*.js
+!build/*.spec
 
 # Security reports
 reports/
 
 # C# / .NET Build artifacts
-installer/bin/
-installer/obj/
-installer/Resources/app-payload.zip
+helper/installer/bin/
+helper/installer/obj/
+helper/installer/Resources/app-payload.zip
 *.exe
 settings.json
 
 # BrowserLogin Build artifacts
-BrowserLogin/bin/
-BrowserLogin/obj/
+helper/BrowserLogin/bin/
+helper/BrowserLogin/obj/

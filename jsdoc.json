@@ -13,7 +13,7 @@
     "destination": "./public/docs",
     "recurse": true,
     "readme": "./README.md",
-    "template": "./jsdoc-template/docdash",
+    "template": "./docs/jsdoc-template/docdash",
     "encoding": "utf8",
     "tutorials": "./docs/tutorials"
   },

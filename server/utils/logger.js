@@ -26,13 +26,13 @@ function loadLogLevel() {
     if (isPkg) {
       // Running as .exe - use AppData/Local
       if (process.platform === 'win32') {
-        settingsPath = path.join(os.homedir(), 'AppData', 'Local', 'ShippingManagerCoPilot', 'settings', 'settings.json');
+        settingsPath = path.join(os.homedir(), 'AppData', 'Local', 'ShippingManagerCoPilot', 'userdata', 'settings', 'settings.json');
       } else {
-        settingsPath = path.join(os.homedir(), '.local', 'share', 'ShippingManagerCoPilot', 'settings', 'settings.json');
+        settingsPath = path.join(os.homedir(), '.local', 'share', 'ShippingManagerCoPilot', 'userdata', 'settings', 'settings.json');
       }
     } else {
-      // Running from source - use data/localdata
-      settingsPath = path.join(__dirname, '..', '..', 'data', 'localdata', 'settings', 'settings.json');
+      // Running from source - use userdata
+      settingsPath = path.join(__dirname, '..', '..', 'userdata', 'settings', 'settings.json');
     }
 
     if (fs.existsSync(settingsPath)) {

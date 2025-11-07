@@ -7,7 +7,7 @@
  * Creates:
  * - dist/ShippingManagerCoPilot-v{version}/
  *   - ShippingManagerCoPilot.exe (Single-file: Python launcher + embedded Node.js server)
- *   - data/forecast/ (empty folder for runtime data)
+ *   - sysdata/forecast/ (forecast cache data)
  *   - LICENSE
  *   - README.md
  *   - START_HERE.txt
@@ -17,12 +17,13 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
-const packageJson = require('./package.json');
+const packageJson = require('../package.json');
 const version = packageJson.version;
 
-const distFolder = path.join(__dirname, 'dist');
+const distFolder = path.join(__dirname, '..', 'dist');
 const outputFolder = path.join(distFolder, `ShippingManagerCoPilot-v${version}`);
-const dataFolder = path.join(outputFolder, 'data', 'forecast');
+const dataFolder = path.join(outputFolder, 'sysdata', 'forecast');
+const userdataFolder = path.join(outputFolder, 'userdata');
 
 console.log('='.repeat(60));
 console.log('Building ShippingManager CoPilot Package');
@@ -38,10 +39,19 @@ if (fs.existsSync(outputFolder)) {
 }
 fs.mkdirSync(outputFolder, { recursive: true });
 fs.mkdirSync(dataFolder, { recursive: true });
-console.log('  [OK] Folders created');
+
+// Create userdata directory structure
+const userdataSubfolders = ['settings', 'certs', 'logs', 'chatbot', 'hijack_history'];
+for (const subfolder of userdataSubfolders) {
+    const subfolderPath = path.join(userdataFolder, subfolder);
+    fs.mkdirSync(subfolderPath, { recursive: true });
+    // Add .gitkeep to preserve empty directories in ZIP
+    fs.writeFileSync(path.join(subfolderPath, '.gitkeep'), '');
+}
+console.log('  [OK] Folders created (sysdata/, userdata/)');
 
 // Copy forecast.json if it exists
-const forecastSrc = path.join(__dirname, 'data', 'forecast', 'forecast.json');
+const forecastSrc = path.join(__dirname, '..', 'sysdata', 'forecast', 'forecast.json');
 if (fs.existsSync(forecastSrc)) {
     fs.copyFileSync(forecastSrc, path.join(dataFolder, 'forecast.json'));
     console.log('  [OK] forecast.json copied');
@@ -86,7 +96,7 @@ for (const helperExe of pythonHelperExes) {
 }
 
 // C#-built BrowserLogin.exe (from helper/)
-const browserLoginSrc = path.join(__dirname, 'helper', 'BrowserLogin.exe');
+const browserLoginSrc = path.join(__dirname, '..', 'helper', 'BrowserLogin.exe');
 if (fs.existsSync(browserLoginSrc)) {
     fs.copyFileSync(browserLoginSrc, path.join(helperFolder, 'BrowserLogin.exe'));
     console.log(`  [OK] BrowserLogin.exe copied (from helper/)`);
@@ -107,7 +117,7 @@ console.log('  [INFO] Node.js server embedded in main .exe (extracted to temp at
 console.log('[3.5/5] Copying public assets...');
 const publicFolder = path.join(outputFolder, 'public');
 fs.mkdirSync(publicFolder, { recursive: true });
-const faviconSrc = path.join(__dirname, 'public', 'favicon.ico');
+const faviconSrc = path.join(__dirname, '..', 'public', 'favicon.ico');
 if (fs.existsSync(faviconSrc)) {
     fs.copyFileSync(faviconSrc, path.join(publicFolder, 'favicon.ico'));
     console.log('  [OK] favicon.ico copied');
@@ -123,7 +133,7 @@ const docs = [
 ];
 
 for (const doc of docs) {
-    const srcPath = path.join(__dirname, doc.src);
+    const srcPath = path.join(__dirname, '..', doc.src);
     if (!fs.existsSync(srcPath)) {
         if (doc.required) {
             console.error(`  [ERROR] ${doc.src} not found!`);
@@ -154,9 +164,9 @@ FIRST RUN:
 - Allow firewall exception for local network access (optional)
 
 DATA STORAGE:
-- User settings: data/localdata/settings/
-- Session cache: data/localdata/settings/sessions.json
-- Certificates: data/localdata/certs/
+- User settings: AppData/Local/ShippingManagerCoPilot/userdata/settings/
+- Session cache: AppData/Local/ShippingManagerCoPilot/userdata/settings/sessions.json
+- Certificates: AppData/Local/ShippingManagerCoPilot/userdata/certs/
 
 TROUBLESHOOTING:
 - If Steam session fails: Close Steam completely, restart app
@@ -182,7 +192,7 @@ console.log();
 
 // Create app-payload.zip for installer
 console.log('[6/6] Creating installer payload...');
-const installerResourcesFolder = path.join(__dirname, 'installer', 'Resources');
+const installerResourcesFolder = path.join(__dirname, '..', 'helper', 'installer', 'Resources');
 const payloadZipPath = path.join(installerResourcesFolder, 'app-payload.zip');
 
 // Create Resources folder if it doesn't exist
@@ -211,7 +221,7 @@ output.on('close', () => {
     console.log();
     console.log('Next steps:');
     console.log('  1. Test: Run ShippingManagerCoPilot.exe in the output folder');
-    console.log('  2. Build installer: cd installer && dotnet publish -c Release');
+    console.log('  2. Build installer: cd helper/installer && dotnet publish -c Release');
     console.log('  3. Distribute: Share the installer executable');
     console.log();
 });

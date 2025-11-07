@@ -22,7 +22,8 @@ module.exports = [
       'node_modules/**',
       'dist/**',
       'build/**',
-      'data/**',
+      'sysdata/**',
+      'userdata/**',
       '.git/**',
       'coverage/**',
       '*.min.js',
@@ -193,7 +194,7 @@ module.exports = [
   },
   {
     // Specific overrides for build/config files
-    files: ['*.config.js', 'build.js'],
+    files: ['*.config.js', 'build/**/*.js'],
     rules: {
       'security/detect-child-process': 'off',
       'security/detect-non-literal-fs-filename': 'off',

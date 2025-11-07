@@ -29,12 +29,12 @@ function getSessionsPath() {
 
     if (isPkg) {
         // Running as packaged .exe - use AppData
-        const appDataPath = path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'settings', 'sessions.json');
+        const appDataPath = path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'settings', 'sessions.json');
         console.log(`[DEBUG] Using APPDATA sessions: ${appDataPath}`);
         return appDataPath;
     }
-    // Running from source - use data/localdata
-    const localPath = path.join(__dirname, '..', '..', 'data', 'localdata', 'settings', 'sessions.json');
+    // Running from source - use userdata
+    const localPath = path.join(__dirname, '..', '..', 'userdata', 'settings', 'sessions.json');
     console.log(`[DEBUG] Using local sessions: ${localPath}`);
     return localPath;
 }

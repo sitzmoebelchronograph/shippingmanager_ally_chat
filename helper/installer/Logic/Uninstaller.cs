@@ -67,13 +67,27 @@ namespace ShippingManagerCoPilot.Installer.Logic
                         {
                             if (!file.Equals(uninstallerPath, StringComparison.OrdinalIgnoreCase))
                             {
-                                try
+                                // Skip files in userdata/ directory when keeping personal data
+                                bool skipFile = false;
+                                if (_keepPersonalData)
                                 {
-                                    File.Delete(file);
+                                    var relativePath = Path.GetRelativePath(_installPath, file);
+                                    if (relativePath.StartsWith("userdata" + Path.DirectorySeparatorChar))
+                                    {
+                                        skipFile = true;
+                                    }
                                 }
-                                catch
+
+                                if (!skipFile)
                                 {
-                                    // Ignore files that can't be deleted
+                                    try
+                                    {
+                                        File.Delete(file);
+                                    }
+                                    catch
+                                    {
+                                        // Ignore files that can't be deleted
+                                    }
                                 }
                             }
                         }
@@ -81,29 +95,13 @@ namespace ShippingManagerCoPilot.Installer.Logic
                         // Delete subdirectories
                         foreach (var dir in Directory.GetDirectories(_installPath))
                         {
-                            // Skip user data directories if user wants to keep personal data
+                            // Skip userdata/ directory if user wants to keep personal data
                             if (_keepPersonalData)
                             {
                                 var dirName = Path.GetFileName(dir).ToLowerInvariant();
-                                if (dirName == "data" || dirName == "settings" || dirName == "logs" || dirName == "certs")
+                                if (dirName == "userdata")
                                 {
-                                    // For 'data' folder, delete forecast cache but keep user data
-                                    if (dirName == "data")
-                                    {
-                                        var forecastDir = Path.Combine(dir, "forecast");
-                                        if (Directory.Exists(forecastDir))
-                                        {
-                                            try
-                                            {
-                                                Directory.Delete(forecastDir, true);
-                                            }
-                                            catch
-                                            {
-                                                // Ignore if can't delete forecast cache
-                                            }
-                                        }
-                                    }
-                                    continue; // Skip this directory
+                                    continue; // Skip userdata directory entirely
                                 }
                             }
 
@@ -117,8 +115,7 @@ namespace ShippingManagerCoPilot.Installer.Logic
                             }
                         }
 
-                        // Schedule uninstaller deletion and directory cleanup
-                        ScheduleUninstallerDeletion(_installPath);
+                        // Note: Uninstaller deletion is scheduled AFTER UI closes (in UninstallCompletePage)
                     }
                     catch (Exception ex)
                     {
@@ -129,30 +126,7 @@ namespace ShippingManagerCoPilot.Installer.Logic
                 UpdateProgress(60, "Program files removed");
                 TaskCompleted?.Invoke(2);
 
-                // Step 3: Remove personal data if requested
-                if (!_keepPersonalData)
-                {
-                    UpdateStatus("Removing personal data...");
-                    UpdateProgress(70, "Removing personal data");
-
-                    var appDataPath = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "ShippingManagerCoPilot");
-
-                    if (Directory.Exists(appDataPath))
-                    {
-                        try
-                        {
-                            Directory.Delete(appDataPath, true);
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new Exception($"Failed to remove personal data: {ex.Message}", ex);
-                        }
-                    }
-                }
-
-                // Step 4: Remove registry entries
+                // Step 3: Remove registry entries
                 UpdateStatus("Removing registry entries...");
                 UpdateProgress(80, "Removing registry entries");
 
@@ -218,19 +192,37 @@ namespace ShippingManagerCoPilot.Installer.Logic
         }
 
         /// <summary>
-        /// Schedules the uninstaller to be deleted on next reboot
+        /// Schedules the uninstaller to be deleted after application closes
         /// </summary>
-        private static void ScheduleUninstallerDeletion(string installPath)
+        /// <param name="installPath">Path to installation directory</param>
+        /// <param name="keepPersonalData">If true, only delete Uninstall.exe and keep settings/data/logs/certs. If false, delete entire folder.</param>
+        public static void ScheduleUninstallerDeletion(string installPath, bool keepPersonalData)
         {
             try
             {
-                // Create a batch file to delete the uninstaller and folder
+                // Create a batch file to delete the uninstaller and optionally the folder
                 var batchPath = Path.Combine(Path.GetTempPath(), "shippingmanager_cleanup.bat");
-                var batchContent = $@"@echo off
+
+                string batchContent;
+                if (keepPersonalData)
+                {
+                    // Keep personal data - only delete Uninstall.exe
+                    // settings/, data/, logs/, certs/ remain in installPath
+                    batchContent = $@"@echo off
+timeout /t 2 /nobreak > nul
+del ""{Path.Combine(installPath, "Uninstall.exe")}""
+del ""%~f0""
+";
+                }
+                else
+                {
+                    // Delete everything including personal data
+                    batchContent = $@"@echo off
 timeout /t 2 /nobreak > nul
 rd /s /q ""{installPath}""
 del ""%~f0""
 ";
+                }
 
                 File.WriteAllText(batchPath, batchContent);
 

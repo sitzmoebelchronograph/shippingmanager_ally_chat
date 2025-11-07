@@ -30,23 +30,23 @@ const DEBUG_MODE = config.DEBUG_MODE;
 // Harbor fee bug logs directory - use APPDATA when running as .exe
 const { getAppDataDir } = require('./config');
 const HARBOR_FEE_BUG_DIR = process.pkg
-  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'data', 'logs', 'harborfeebug')
-  : path.join(__dirname, '..', 'data', 'logs', 'harborfeebug');
+  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'logs', 'harborfeebug')
+  : path.join(__dirname, '..', 'userdata', 'logs', 'harborfeebug');
 
 // Known harbor fee bugs file (for game developers)
 const HARBOR_BUGS_FILE = process.pkg
-  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'data', 'known-harbor-fee-bugs.json')
-  : path.join(__dirname, '..', 'data', 'known-harbor-fee-bugs.json');
+  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'logs', 'known-harbor-fee-bugs.json')
+  : path.join(__dirname, '..', 'userdata', 'logs', 'known-harbor-fee-bugs.json');
 
 // Bunker price bug logs directory
 const BUNKER_PRICE_BUG_DIR = process.pkg
-  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'data', 'logs', 'bunkerpricebug')
-  : path.join(__dirname, '..', 'data', 'logs', 'bunkerpricebug');
+  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'logs', 'bunkerpricebug')
+  : path.join(__dirname, '..', 'userdata', 'logs', 'bunkerpricebug');
 
 // Known bunker price bugs file (for game developers)
 const BUNKER_PRICE_BUGS_FILE = process.pkg
-  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'data', 'known-bunker-price-bugs.json')
-  : path.join(__dirname, '..', 'data', 'known-bunker-price-bugs.json');
+  ? path.join(getAppDataDir(), 'ShippingManagerCoPilot', 'userdata', 'logs', 'known-bunker-price-bugs.json')
+  : path.join(__dirname, '..', 'userdata', 'logs', 'known-bunker-price-bugs.json');
 
 /**
  * Fetches current market prices for fuel and CO2.

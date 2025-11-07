@@ -133,8 +133,9 @@ This organizes all files into:
 ```
 dist/ShippingManagerCoPilot-v0.1.0/
 ├── ShippingManagerCoPilot.exe  (single-file: Python launcher + embedded Node.js server)
-├── data/
-│   └── forecast/  (empty, created at runtime)
+├── sysdata/
+│   └── forecast/  (forecast cache, created at runtime)
+├── userdata/  (user settings, created at runtime in AppData on first run)
 ├── public/
 │   └── favicon.ico
 ├── README.md
@@ -191,7 +192,7 @@ hiddenimports=['win32crypt', 'win32api', 'cryptography', 'your_missing_module']
 
 **Error: `Cannot find module`**
 - pkg.assets is already configured in package.json (lines 19-38)
-- Includes: public/, server/, data/forecast/, all dependencies
+- Includes: public/, server/, sysdata/forecast/, all dependencies
 - If adding new dependencies, add them to pkg.assets array
 - If adding new folders, add them with glob pattern (folder + slash + two asterisks + slash + asterisk)
 

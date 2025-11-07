@@ -73,8 +73,8 @@ if IS_FROZEN:
     DATA_ROOT = Path(os.environ['LOCALAPPDATA']) / 'ShippingManagerCoPilot'
     print(f"[DEBUG] Using LOCALAPPDATA: {DATA_ROOT}")
 else:
-    # Running as .py - use data/localdata
-    DATA_ROOT = PROJECT_ROOT / 'data' / 'localdata'
+    # Running as .py - use userdata
+    DATA_ROOT = PROJECT_ROOT / 'userdata'
     print(f"[DEBUG] Using local data directory: {DATA_ROOT}")
 
 DATA_ROOT.mkdir(parents=True, exist_ok=True)
@@ -183,15 +183,15 @@ def get_log_paths():
     Matches the logic in server/config.js getLogDir()
     """
     if getattr(sys, 'frozen', False):
-        # Running as packaged .exe - use AppData/Local
+        # Running as packaged .exe - use AppData/Local/userdata
         if platform.system() == 'Windows':
-            log_dir = Path.home() / 'AppData' / 'Local' / 'ShippingManagerCoPilot' / 'logs'
+            log_dir = Path.home() / 'AppData' / 'Local' / 'ShippingManagerCoPilot' / 'userdata' / 'logs'
         else:
             # macOS/Linux
-            log_dir = Path.home() / '.local' / 'share' / 'ShippingManagerCoPilot' / 'logs'
+            log_dir = Path.home() / '.local' / 'share' / 'ShippingManagerCoPilot' / 'userdata' / 'logs'
     else:
-        # Running from source - use project directory
-        log_dir = PROJECT_ROOT / 'data' / 'logs'
+        # Running from source - use project userdata
+        log_dir = PROJECT_ROOT / 'userdata' / 'logs'
 
     return {
         'server_log': log_dir / 'server.log',
@@ -397,11 +397,11 @@ def start_server(settings):
 
         # Clear the server log file before starting (so we only see current startup logs)
         if getattr(sys, 'frozen', False):
-            # .exe mode - logs in LocalAppData
-            server_log_path = Path(os.environ.get('LOCALAPPDATA', '')) / 'ShippingManagerCoPilot' / 'logs' / 'server.log'
+            # .exe mode - logs in LocalAppData/userdata
+            server_log_path = Path(os.environ.get('LOCALAPPDATA', '')) / 'ShippingManagerCoPilot' / 'userdata' / 'logs' / 'server.log'
         else:
-            # .py mode - logs in project data/logs directory
-            server_log_path = PROJECT_ROOT / 'data' / 'logs' / 'server.log'
+            # .py mode - logs in project userdata directory
+            server_log_path = PROJECT_ROOT / 'userdata' / 'logs' / 'server.log'
 
         try:
             if server_log_path.exists():
@@ -1644,11 +1644,11 @@ def show_loading_dialog(settings, on_ready_callback):
     def log_monitor_thread():
         # Use the SAME log path logic as Node.js
         if getattr(sys, 'frozen', False):
-            # .exe mode - logs in LocalAppData
-            log_file = Path(os.environ.get('LOCALAPPDATA', '')) / 'ShippingManagerCoPilot' / 'logs' / 'server.log'
+            # .exe mode - logs in LocalAppData/userdata
+            log_file = Path(os.environ.get('LOCALAPPDATA', '')) / 'ShippingManagerCoPilot' / 'userdata' / 'logs' / 'server.log'
         else:
-            # .py mode - logs in project data/logs directory
-            log_file = PROJECT_ROOT / 'data' / 'logs' / 'server.log'
+            # .py mode - logs in project userdata directory
+            log_file = PROJECT_ROOT / 'userdata' / 'logs' / 'server.log'
 
         # Wait for log file to be created and have content
         for i in range(50):  # Wait up to 5 seconds
@@ -2001,9 +2001,9 @@ tray_icon = None
 
 def migrate_roaming_to_local():
     """
-    One-time migration: Move user data from AppData/Roaming to AppData/Local.
-    Only runs once when Roaming data exists but Local data doesn't.
-    Settings are ALWAYS stored in LocalAppData, regardless of install location.
+    One-time migration: Move user data from AppData/Roaming to AppData/Local/userdata.
+    Only runs once when Roaming data exists but Local/userdata data doesn't.
+    Settings are ALWAYS stored in LocalAppData/userdata, regardless of install location.
     """
     # Only run when packaged as .exe
     if not getattr(sys, 'frozen', False):
@@ -2015,9 +2015,10 @@ def migrate_roaming_to_local():
 
     roaming_base = Path.home() / 'AppData' / 'Roaming' / 'ShippingManagerCoPilot'
     local_base = Path.home() / 'AppData' / 'Local' / 'ShippingManagerCoPilot'
+    local_userdata = local_base / 'userdata'
 
-    # Check if Local sessions.json already exists (migration already done)
-    local_sessions = local_base / 'settings' / 'sessions.json'
+    # Check if Local userdata/settings/sessions.json already exists (migration already done)
+    local_sessions = local_userdata / 'settings' / 'sessions.json'
     if local_sessions.exists():
         return  # Already migrated
 
@@ -2026,21 +2027,21 @@ def migrate_roaming_to_local():
         return  # Nothing to migrate
 
     print("[SM-CoPilot] ========================================")
-    print("[SM-CoPilot] Migrating user data to AppData/Local...")
+    print("[SM-CoPilot] Migrating user data to AppData/Local/userdata...")
     print("[SM-CoPilot] ========================================")
 
     try:
         import shutil
 
-        # Create Local directory if it doesn't exist
-        local_base.mkdir(parents=True, exist_ok=True)
+        # Create Local/userdata directory if it doesn't exist
+        local_userdata.mkdir(parents=True, exist_ok=True)
 
-        print(f"[SM-CoPilot] Copying data from Roaming to Local...")
+        print(f"[SM-CoPilot] Copying data from Roaming to Local/userdata...")
         print(f"[SM-CoPilot] Source: {roaming_base}")
-        print(f"[SM-CoPilot] Target: {local_base}")
+        print(f"[SM-CoPilot] Target: {local_userdata}")
 
-        # Copy entire directory tree
-        shutil.copytree(roaming_base, local_base, dirs_exist_ok=True)
+        # Copy entire directory tree from Roaming to Local/userdata
+        shutil.copytree(roaming_base, local_userdata, dirs_exist_ok=True)
 
         print(f"[SM-CoPilot] ✓ Data copied successfully")
 
@@ -2049,12 +2050,12 @@ def migrate_roaming_to_local():
         shutil.rmtree(roaming_base)
 
         print(f"[SM-CoPilot] ✓ Migration complete")
-        print(f"[SM-CoPilot] New location: {local_base}")
+        print(f"[SM-CoPilot] New location: {local_userdata}")
         print("[SM-CoPilot] ========================================")
 
     except Exception as e:
         print(f"[SM-CoPilot] ✗ Migration failed: {e}", file=sys.stderr)
-        print(f"[SM-CoPilot] Continuing with empty Local directory...")
+        print(f"[SM-CoPilot] Continuing with empty Local/userdata directory...")
 
 def main():
     """Main entry point"""
