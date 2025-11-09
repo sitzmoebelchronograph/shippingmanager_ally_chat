@@ -426,6 +426,13 @@ router.post('/vessel/:vesselId/history/export', async (req, res) => {
     const vesselId = parseInt(req.params.vesselId);
     const format = req.body.format || 'json';
 
+    // Validate format parameter immediately
+    if (!['txt', 'csv', 'json'].includes(format)) {
+      return res.status(400).json({
+        error: 'Invalid format. Must be txt, csv, or json'
+      });
+    }
+
     logger.log(`[Harbor Map] Exporting history for vessel ${vesselId} as ${format}`);
 
     // Fetch vessel history from API
@@ -520,6 +527,22 @@ function formatHistoryAsTXT(vessel, history) {
 /**
  * Formats vessel history as CSV (spreadsheet-compatible)
  */
+/**
+ * Escape CSV formula injection (=, +, @, - at start of cell)
+ * Prefixes dangerous characters with single quote to force text mode in Excel
+ * @param {string} value - Value to escape
+ * @returns {string} Escaped value safe for CSV
+ */
+function escapeCSVFormula(value) {
+  if (!value) return '';
+  const str = String(value);
+  // If starts with formula characters, prefix with single quote
+  if (/^[=+@\-]/.test(str)) {
+    return "'" + str.replace(/"/g, '""'); // Also escape quotes
+  }
+  return str.replace(/"/g, '""'); // Just escape quotes
+}
+
 function formatHistoryAsCSV(history) {
   let csv = 'Date,Origin,Destination,Distance,Duration,Cargo_Dry,Cargo_Ref,Cargo_Fuel,Cargo_Crude,Income,Fuel_Used,Wear\n';
 
@@ -537,7 +560,8 @@ function formatHistoryAsCSV(history) {
     const fuel = trip.fuel_used || 0;
     const wear = trip.wear || 0;
 
-    csv += `"${date}","${origin}","${destination}",${distance},"${duration}",${cargoDry},${cargoRef},${cargoFuel},${cargoCrude},${income},${fuel},${wear}\n`;
+    // Escape string fields to prevent CSV formula injection
+    csv += `"${escapeCSVFormula(date)}","${escapeCSVFormula(origin)}","${escapeCSVFormula(destination)}",${distance},"${escapeCSVFormula(duration)}",${cargoDry},${cargoRef},${cargoFuel},${cargoCrude},${income},${fuel},${wear}\n`;
   });
 
   return csv;

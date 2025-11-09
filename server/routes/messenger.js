@@ -295,17 +295,19 @@ router.post('/messenger/get-messages', express.json(), async (req, res) => {
  * Why This Endpoint:
  * - Bypasses in-game messenger interface (may have bugs/limitations)
  * - Provides input validation before hitting game API
- * - Sanitizes input to prevent XSS or injection attacks
+ * - Blocks dangerous HTML/JavaScript patterns to prevent XSS attacks
  * - Rate limits to prevent spam (30 messages/minute)
  *
  * Validation Rules:
  * - message: String, 1-1000 characters
  * - subject: String, non-empty (required)
  * - target_user_id: Positive integer (required)
+ * - Dangerous patterns blocked: <script>, <iframe>, javascript:, onerror=, etc.
  *
- * Sanitization:
- * - validator.trim() - Removes leading/trailing whitespace
- * - validator.unescape() - Converts HTML entities to characters
+ * Security Strategy (Defense in Depth):
+ * - Backend: Pattern blocking (blocks dangerous HTML/JS in message AND subject)
+ * - Frontend: HTML escaping on render (escapes all HTML entities)
+ * - This prevents XSS while avoiding double-escaping issues
  *
  * Rate Limiting:
  * - Applied via messageLimiter middleware
@@ -348,13 +350,26 @@ router.post('/messenger/send-private', messageLimiter, express.json(), async (re
     return res.status(400).json({ error: 'Valid target_user_id required' });
   }
 
-  const sanitizedMessage = validator.trim(message);
-  const sanitizedSubject = validator.trim(subject);
+  const trimmedMessage = validator.trim(message);
+  const trimmedSubject = validator.trim(subject);
+
+  // Block dangerous HTML/JavaScript patterns in message and subject
+  const dangerousPatterns = /<script|<iframe|javascript:|data:text\/html|on\w+\s*=/i;
+  if (dangerousPatterns.test(trimmedMessage)) {
+    return res.status(400).json({
+      error: 'Message contains forbidden HTML or JavaScript content'
+    });
+  }
+  if (dangerousPatterns.test(trimmedSubject)) {
+    return res.status(400).json({
+      error: 'Subject contains forbidden HTML or JavaScript content'
+    });
+  }
 
   try {
     await apiCall('/messenger/send-message', 'POST', {
-      subject: validator.unescape(sanitizedSubject),
-      body: validator.unescape(sanitizedMessage),
+      subject: trimmedSubject,
+      body: trimmedMessage,
       recipient: targetUserIdNum
     });
 
@@ -473,6 +488,12 @@ router.post('/messenger/delete-chat', express.json(), async (req, res) => {
  *   name: string  // Search term (partial match supported)
  * }
  *
+ * Validation Rules:
+ * - Query must be string type
+ * - Length: 2-100 characters
+ * - Only alphanumeric characters, spaces, hyphens, underscores, and dots allowed
+ * - HTML characters are escaped to prevent XSS
+ *
  * Response Structure:
  * {
  *   data: {
@@ -494,12 +515,30 @@ router.post('/messenger/delete-chat', express.json(), async (req, res) => {
 router.post('/user/search', express.json(), async (req, res) => {
   const { name } = req.body;
 
-  if (!name || typeof name !== 'string' || name.length === 0) {
+  // Validate search query
+  if (!name || typeof name !== 'string') {
     return res.status(400).json({ error: 'Search name required' });
   }
 
+  const trimmedName = validator.trim(name);
+
+  // Check length constraints
+  if (trimmedName.length < 2) {
+    return res.status(400).json({ error: 'Search query too short (min 2 characters)' });
+  }
+  if (trimmedName.length > 100) {
+    return res.status(400).json({ error: 'Search query too long (max 100 characters)' });
+  }
+
+  // Allow only alphanumeric, spaces, hyphens, underscores, and dots
+  if (!/^[a-zA-Z0-9\s\-_.]+$/.test(trimmedName)) {
+    return res.status(400).json({ error: 'Search query contains invalid characters' });
+  }
+
+  const sanitizedName = validator.escape(trimmedName);
+
   try {
-    const data = await apiCall('/user/search', 'POST', { name });
+    const data = await apiCall('/user/search', 'POST', { name: sanitizedName });
     res.json(data);
   } catch (error) {
     // Game API sometimes returns 500 for user search

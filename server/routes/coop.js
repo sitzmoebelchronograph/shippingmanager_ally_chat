@@ -184,8 +184,13 @@ router.post('/coop/send-max', async (req, res) => {
   try {
     const { user_id } = req.body;
 
+    // Validate user_id is provided and is a positive integer
     if (!user_id) {
       return res.status(400).json({ error: 'user_id is required' });
+    }
+
+    if (!Number.isInteger(user_id) || user_id <= 0) {
+      return res.status(400).json({ error: 'Invalid user_id. Must be a positive integer' });
     }
 
     // Fetch current coop data to get available vessels and member info

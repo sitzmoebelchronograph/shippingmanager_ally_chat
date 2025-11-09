@@ -31,6 +31,7 @@
  */
 
 const express = require('express');
+const validator = require('validator');
 const { apiCall, apiCallWithRetry, getUserId } = require('../utils/api');
 const gameapi = require('../gameapi');
 const { broadcastToUser } = require('../websocket');
@@ -234,9 +235,11 @@ router.post('/bunker/purchase-fuel', express.json(), async (req, res) => {
     // Broadcast error notification to all clients
     const errorUserId = getUserId();
     if (errorUserId) {
+      // Escape error message to prevent XSS
+      const safeErrorMessage = validator.escape(error.message || 'Unknown error');
       broadcastToUser(errorUserId, 'user_action_notification', {
         type: 'error',
-        message: `⛽ <strong>Purchase Failed</strong><br><br>${error.message}`
+        message: `⛽ <strong>Purchase Failed</strong><br><br>${safeErrorMessage}`
       });
 
       // Broadcast fuel purchase complete to unlock buttons even on error
@@ -332,9 +335,11 @@ router.post('/bunker/purchase-co2', express.json(), async (req, res) => {
     // Broadcast error notification to all clients
     const errorUserId = getUserId();
     if (errorUserId) {
+      // Escape error message to prevent XSS
+      const safeErrorMessage = validator.escape(error.message || 'Unknown error');
       broadcastToUser(errorUserId, 'user_action_notification', {
         type: 'error',
-        message: `💨 <strong>Purchase Failed</strong><br><br>${error.message}`
+        message: `💨 <strong>Purchase Failed</strong><br><br>${safeErrorMessage}`
       });
 
       // Broadcast CO2 purchase complete to unlock buttons even on error
@@ -580,9 +585,11 @@ router.post('/vessel/sell-vessels', express.json(), async (req, res) => {
     logger.error('[Vessel Sell] Error:', error);
     const userId = getUserId();
     if (userId) {
+      // Escape error message to prevent XSS
+      const safeErrorMessage = validator.escape(error.message || 'Unknown error');
       broadcastToUser(userId, 'user_action_notification', {
         type: 'error',
-        message: `⛴️ <strong>Sale Failed</strong><br><br>${error.message}`
+        message: `⛴️ <strong>Sale Failed</strong><br><br>${safeErrorMessage}`
       });
     }
     res.status(500).json({ error: 'Failed to sell vessels' });
@@ -597,8 +604,28 @@ router.post('/vessel/sell-vessels', express.json(), async (req, res) => {
 router.post('/vessel/purchase-vessel', express.json(), async (req, res) => {
   const { vessel_id, name, antifouling_model, count, silent } = req.body;
 
+  // Validate required fields
   if (!vessel_id || !name) {
     return res.status(400).json({ error: 'Missing required fields: vessel_id, name' });
+  }
+
+  // Validate vessel_id is a positive integer
+  if (!Number.isInteger(vessel_id) || vessel_id <= 0) {
+    return res.status(400).json({ error: 'Invalid vessel_id. Must be a positive integer' });
+  }
+
+  // Validate name is a string with reasonable length
+  if (typeof name !== 'string') {
+    return res.status(400).json({ error: 'Invalid name. Must be a string' });
+  }
+
+  if (name.length < 1 || name.length > 100) {
+    return res.status(400).json({ error: 'Invalid name length. Must be between 1 and 100 characters' });
+  }
+
+  // Validate antifouling_model if provided
+  if (antifouling_model !== undefined && antifouling_model !== null && typeof antifouling_model !== 'string') {
+    return res.status(400).json({ error: 'Invalid antifouling_model. Must be a string or null' });
   }
 
   try {
@@ -615,12 +642,15 @@ router.post('/vessel/purchase-vessel', express.json(), async (req, res) => {
       const vesselName = data.user_vessel.name || name;
       const purchaseCount = count || 1;
 
+      // Escape vessel name to prevent XSS in notifications
+      const safeVesselName = validator.escape(vesselName);
+
       logger.log(`[Manual Vessel Purchase] User bought ${purchaseCount}x ${vesselName}`);
 
       // Broadcast notification to all clients (unless silent=true)
       broadcastToUser(userId, 'user_action_notification', {
         type: 'success',
-        message: `🚢 <strong>Purchase Successful!</strong><br><br>Purchased ${purchaseCount}x ${vesselName}`
+        message: `🚢 <strong>Purchase Successful!</strong><br><br>Purchased ${purchaseCount}x ${safeVesselName}`
       });
     }
 
@@ -641,9 +671,11 @@ router.post('/vessel/purchase-vessel', express.json(), async (req, res) => {
 
     const userId = getUserId();
     if (userId && !silent) {
+      // Escape error message to prevent XSS
+      const safeErrorMessage = validator.escape(error.message || 'Unknown error');
       broadcastToUser(userId, 'user_action_notification', {
         type: 'error',
-        message: `🚢 <strong>Purchase Failed</strong><br><br>${error.message}`
+        message: `🚢 <strong>Purchase Failed</strong><br><br>${safeErrorMessage}`
       });
     }
 
@@ -891,9 +923,11 @@ router.post('/vessel/bulk-repair', express.json(), async (req, res) => {
 
     const userId = getUserId();
     if (userId) {
+      // Escape error message to prevent XSS
+      const safeErrorMessage = validator.escape(error.message || 'Unknown error');
       broadcastToUser(userId, 'user_action_notification', {
         type: 'error',
-        message: `🔧 <strong>Error</strong><br><br>${error.message}`
+        message: `🔧 <strong>Error</strong><br><br>${safeErrorMessage}`
       });
     }
 

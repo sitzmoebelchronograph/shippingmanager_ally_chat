@@ -582,3 +582,27 @@ This software is free to use and modify, but **may not be sold commercially**. S
 <img src="screenshots/13_7_smcopilot_autopilot_fairhand.png" width="50%">
 <img src="screenshots/13_8_smcopilot_autopilot_captain_blackbeard.png" width="50%">
 <img src="screenshots/13_9_smcopilot_autopilot_yardforeman.png" width="50%">
+
+### Logbook
+
+<img src="screenshots/15_1_smcopilot_logbook.png" width="50%">
+<img src="screenshots/15_2_smcopilot_logbook_details1.png" width="50%">
+<img src="screenshots/15_3_smcopilot_logbook_details2.png" width="50%">
+<img src="screenshots/15_4_smcopilot_logbook_details3.png" width="50%">
+<img src="screenshots/15_5_smcopilot_logbook_details4.png" width="50%">
+
+### Harbor Map
+
+<img src="screenshots/16_1_smcopilot_map_overview.png" width="50%">
+<img src="screenshots/16_2_smcopliot_map_cluster1.png" width="50%">
+<img src="screenshots/16_3_smcopilot_map_cluster2.png" width="50%">
+<img src="screenshots/16_4_smcopilot_map_modes.png" width="50%">
+<img src="screenshots/16_5_smcopilot_map_filters.png" width="50%">
+<img src="screenshots/16_6_smcopilo_map_harbor_click.png" width="50%">
+<img src="screenshots/16_7_smcopilot_map_harbor_click_details.png" width="50%">
+<img src="screenshots/16_8_smcopilot_map_vessel_click.png" width="50%">
+<img src="screenshots/16_9_smcopilot_map_vessel_click_details1.png" width="50%">
+<img src="screenshots/16_10_smcopilot_map_vessel_click_details2.png" width="50%">
+<img src="screenshots/16_11_smcopilot_map_vessel_click_details3.png" width="50%">
+<img src="screenshots/16_12_smcopilot_map_vessel_click_details4.png" width="50%">
+<img src="screenshots/16_13_smcopilot_map_vessel_click_details_vessel-history_export.png" width="50%">

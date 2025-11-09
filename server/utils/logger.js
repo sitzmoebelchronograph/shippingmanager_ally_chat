@@ -127,7 +127,7 @@ if (loadLogLevel() === 'debug') {
         })(),
         fileFormat
       ),
-      options: { flags: 'a' } // Append mode - user manages manually
+      options: { flags: 'a' } // Append mode - Python clears the file before starting Node
     })
   );
 }

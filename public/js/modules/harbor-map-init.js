@@ -31,18 +31,18 @@ export async function preloadHarborMapData() {
  */
 export async function refreshHarborMapIfOpen() {
   try {
-    const overlay = document.getElementById('harborMapOverlay');
-    const isMapOpen = overlay && !overlay.classList.contains('hidden');
+    // Check if Harbor Map tab is active
+    const harborMapCanvas = document.getElementById('harborMapCanvas');
+    const isMapVisible = harborMapCanvas && harborMapCanvas.offsetParent !== null;
 
-    // Always update cache, even if map is closed (so it's fresh when opened)
-    const savedFilter = localStorage.getItem('harborMapFilter') || 'my_ports';
-    await prefetchHarborMapData(savedFilter);
-
-    if (!isMapOpen) {
-      // Map is closed - cache updated, nothing else to do
-      console.log('[Harbor Map] Cache updated (map closed)');
+    if (!isMapVisible) {
+      // Map tab is not active - skip update entirely to save resources
       return;
     }
+
+    // Map is visible - update cache
+    const savedFilter = localStorage.getItem('harborMapFilter') || 'my_ports';
+    await prefetchHarborMapData(savedFilter);
 
     // Map is open - check if panels are open
     const vesselPanel = document.getElementById('vessel-detail-panel');

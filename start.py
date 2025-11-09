@@ -395,13 +395,15 @@ def start_server(settings):
         print(f"[SM-CoPilot] Starting server on {host}:{port}", file=sys.stderr)
         log_to_server_file('info', f'Python launcher starting Node.js server on {host}:{port}')
 
-        # Clear the server log file before starting (so we only see current startup logs)
+        # Clear the server log and debug log files before starting (so we only see current startup logs)
         if getattr(sys, 'frozen', False):
             # .exe mode - logs in LocalAppData/userdata
             server_log_path = Path(os.environ.get('LOCALAPPDATA', '')) / 'ShippingManagerCoPilot' / 'userdata' / 'logs' / 'server.log'
+            debug_log_path = Path(os.environ.get('LOCALAPPDATA', '')) / 'ShippingManagerCoPilot' / 'userdata' / 'logs' / 'debug.log'
         else:
             # .py mode - logs in project userdata directory
             server_log_path = PROJECT_ROOT / 'userdata' / 'logs' / 'server.log'
+            debug_log_path = PROJECT_ROOT / 'userdata' / 'logs' / 'debug.log'
 
         try:
             if server_log_path.exists():
@@ -409,6 +411,13 @@ def start_server(settings):
                 print(f"[SM-CoPilot] Cleared old server log", file=sys.stderr)
         except Exception as e:
             print(f"[SM-CoPilot] Warning: Could not clear server log: {e}", file=sys.stderr)
+
+        try:
+            if debug_log_path.exists():
+                debug_log_path.unlink()
+                print(f"[SM-CoPilot] Cleared old debug log", file=sys.stderr)
+        except Exception as e:
+            print(f"[SM-CoPilot] Warning: Could not clear debug log: {e}", file=sys.stderr)
 
         # Determine which server executable to use
         if getattr(sys, 'frozen', False):
@@ -2127,17 +2136,26 @@ def main():
     print("[SM-CoPilot] Starting Shipping Manager CoPilot Tray Icon", file=sys.stderr)
     print("[SM-CoPilot] Press Ctrl+C to exit", file=sys.stderr)
 
-    # Clear server.log on first startup only (use PID file as indicator)
-    # If PID file doesn't exist, this is a fresh start -> clear log
+    # Clear server.log and debug.log on first startup only (use PID file as indicator)
+    # If PID file doesn't exist, this is a fresh start -> clear logs
     if not PID_FILE.exists():
         log_paths = get_log_paths()
         server_log = log_paths['server_log']
+        debug_log = log_paths['debug_log']
+
         try:
             server_log.parent.mkdir(parents=True, exist_ok=True)
             with open(server_log, 'w', encoding='utf-8') as f:
                 pass  # Clear file
         except Exception as e:
             print(f"[SM-CoPilot] Warning: Could not clear server.log: {e}", file=sys.stderr)
+
+        try:
+            debug_log.parent.mkdir(parents=True, exist_ok=True)
+            with open(debug_log, 'w', encoding='utf-8') as f:
+                pass  # Clear file
+        except Exception as e:
+            print(f"[SM-CoPilot] Warning: Could not clear debug.log: {e}", file=sys.stderr)
 
     log_to_server_file('info', 'Shipping Manager CoPilot Starting')
 

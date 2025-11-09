@@ -6,6 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
+const validator = require('validator');
 const logbook = require('../logbook');
 const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
@@ -33,11 +34,35 @@ router.post('/get-logs', async (req, res) => {
       });
     }
 
+    // Validate search parameter to prevent XSS
+    let searchQuery = '';
+    if (req.body.search && req.body.search.trim() !== '') {
+      const trimmedSearch = validator.trim(req.body.search);
+
+      // Validate: allow only alphanumeric, spaces, hyphens, underscores, dots
+      if (!/^[a-zA-Z0-9\s\-_.]+$/.test(trimmedSearch)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Search query contains invalid characters. Only letters, numbers, spaces, hyphens, underscores, and dots are allowed.'
+        });
+      }
+
+      // Validate length (max 100 characters)
+      if (trimmedSearch.length > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Search query too long (max 100 characters)'
+        });
+      }
+
+      searchQuery = trimmedSearch;
+    }
+
     const filters = {
       status: req.body.status || 'ALL',
       timeRange: req.body.timeRange || 'all',
       autopilot: req.body.autopilot || 'ALL',
-      search: req.body.search || ''
+      search: searchQuery
     };
 
     const logs = await logbook.getLogEntries(userId, filters);
@@ -80,12 +105,44 @@ router.post('/download', async (req, res) => {
       });
     }
 
+    // Validate format parameter immediately
     const format = req.body.format || 'json';
+    if (!['txt', 'csv', 'json'].includes(format)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid format. Must be txt, csv, or json'
+      });
+    }
+
+    // Validate search parameter to prevent XSS
+    let searchQuery = '';
+    if (req.body.search && req.body.search.trim() !== '') {
+      const trimmedSearch = validator.trim(req.body.search);
+
+      // Validate: allow only alphanumeric, spaces, hyphens, underscores, dots
+      if (!/^[a-zA-Z0-9\s\-_.]+$/.test(trimmedSearch)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Search query contains invalid characters. Only letters, numbers, spaces, hyphens, underscores, and dots are allowed.'
+        });
+      }
+
+      // Validate length (max 100 characters)
+      if (trimmedSearch.length > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Search query too long (max 100 characters)'
+        });
+      }
+
+      searchQuery = trimmedSearch;
+    }
+
     const filters = {
       status: req.body.status || 'ALL',
       timeRange: req.body.timeRange || 'all',
       autopilot: req.body.autopilot || 'ALL',
-      search: req.body.search || ''
+      search: searchQuery
     };
 
     const logs = await logbook.getLogEntries(userId, filters);
@@ -262,6 +319,22 @@ function formatDetailsAsTXT(obj, indent = 0) {
 }
 
 /**
+ * Escape CSV formula injection (=, +, @, - at start of cell)
+ * Prefixes dangerous characters with single quote to force text mode in Excel
+ * @param {string} value - Value to escape
+ * @returns {string} Escaped value safe for CSV
+ */
+function escapeCSVFormula(value) {
+  if (!value) return '';
+  const str = String(value);
+  // If starts with formula characters, prefix with single quote
+  if (/^[=+@\-]/.test(str)) {
+    return "'" + str.replace(/"/g, '""'); // Also escape quotes
+  }
+  return str.replace(/"/g, '""'); // Just escape quotes
+}
+
+/**
  * Format logs as CSV (Excel-compatible)
  */
 function formatLogsAsCSV(logs) {
@@ -275,9 +348,10 @@ function formatLogsAsCSV(logs) {
     const date = new Date(log.timestamp);
     const dateStr = date.toLocaleDateString();
     const timeStr = date.toLocaleTimeString();
-    const details = JSON.stringify(log.details).replace(/"/g, '""'); // Escape quotes
+    const details = JSON.stringify(log.details);
 
-    output += `${log.timestamp},"${dateStr}","${timeStr}","${log.autopilot}","${log.status}","${log.summary}","${details}"\n`;
+    // Escape all fields to prevent CSV formula injection
+    output += `${log.timestamp},"${escapeCSVFormula(dateStr)}","${escapeCSVFormula(timeStr)}","${escapeCSVFormula(log.autopilot)}","${escapeCSVFormula(log.status)}","${escapeCSVFormula(log.summary)}","${escapeCSVFormula(details)}"\n`;
   });
 
   return output;

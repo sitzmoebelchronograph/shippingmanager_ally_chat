@@ -145,14 +145,14 @@ router.get('/chat', async (req, res) => {
  * Why This Endpoint:
  * - Bypasses in-game chat interface that has character bugs
  * - Provides input validation before hitting game API
- * - Sanitizes input to prevent XSS or injection attacks
+ * - Blocks dangerous HTML/JavaScript patterns to prevent XSS attacks
  * - Rate limits to prevent spam (30 messages/minute)
  *
  * Validation Rules:
  * - Message must be string type
  * - Length: 1-1000 characters (game API limit)
  * - Trimmed of leading/trailing whitespace
- * - HTML entities unescaped (validator.unescape)
+ * - Dangerous patterns blocked: <script>, <iframe>, javascript:, onerror=, etc.
  *
  * Rate Limiting:
  * - Applied via messageLimiter middleware
@@ -160,9 +160,10 @@ router.get('/chat', async (req, res) => {
  * - Returns 429 Too Many Requests when exceeded
  * - Prevents spam and reduces ToS violation risk
  *
- * Sanitization:
- * - validator.trim() - Removes leading/trailing whitespace
- * - validator.unescape() - Converts HTML entities to characters
+ * Security Strategy (Defense in Depth):
+ * - Backend: Pattern blocking (blocks dangerous HTML/JS)
+ * - Frontend: HTML escaping on render (escapes all HTML entities)
+ * - This prevents XSS while avoiding double-escaping issues
  * - Prevents empty messages after trimming
  *
  * No Alliance Handling:
@@ -192,12 +193,20 @@ router.post('/send-message', messageLimiter, express.json(), async (req, res) =>
     return res.status(400).json({ error: 'Invalid message length or content' });
   }
 
-  const sanitizedMessage = validator.trim(message);
+  const trimmedMessage = validator.trim(message);
+
+  // Block dangerous HTML/JavaScript patterns
+  const dangerousPatterns = /<script|<iframe|javascript:|data:text\/html|on\w+\s*=/i;
+  if (dangerousPatterns.test(trimmedMessage)) {
+    return res.status(400).json({
+      error: 'Message contains forbidden HTML or JavaScript content'
+    });
+  }
 
   try {
     await apiCall('/alliance/post-chat', 'POST', {
       alliance_id: getAllianceId(),
-      text: validator.unescape(sanitizedMessage)
+      text: trimmedMessage
     });
 
     res.json({ success: true });

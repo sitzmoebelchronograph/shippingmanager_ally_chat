@@ -15,6 +15,7 @@
  */
 
 const express = require('express');
+const validator = require('validator');
 const { apiCall, getUserId } = require('../utils/api');
 const { broadcastToUser } = require('../websocket');
 const logger = require('../utils/logger');
@@ -72,10 +73,11 @@ router.post('/anchor/purchase', express.json(), async (req, res) => {
   try {
     const { amount } = req.body;
 
-    if (!amount || amount < 1) {
+    // Validate amount: must be integer between 1-10
+    if (!amount || !Number.isInteger(amount) || amount < 1 || amount > 10) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid amount'
+        error: 'Invalid amount. Must be an integer between 1 and 10'
       });
     }
 
@@ -285,9 +287,11 @@ router.post('/anchor-point/purchase', express.json(), async (req, res) => {
 
     const userId = getUserId();
     if (userId) {
+      // Escape error message to prevent XSS
+      const safeErrorMessage = validator.escape(error.message || 'Unknown error');
       broadcastToUser(userId, 'user_action_notification', {
         type: 'error',
-        message: `⚓ <strong>Purchase Failed</strong><br><br>${error.message}`
+        message: `⚓ <strong>Purchase Failed</strong><br><br>${safeErrorMessage}`
       });
     }
 
