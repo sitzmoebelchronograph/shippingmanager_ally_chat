@@ -7,14 +7,23 @@
  */
 
 import { fetchHarborMapOverview, fetchVesselReachablePorts, fetchPortDetails, getCachedOverview } from './api-client.js';
-import { showVesselPanel, hideVesselPanel } from './vessel-panel.js';
-import { showPortPanel, hidePortPanel } from './port-panel.js';
+import { showVesselPanel, hideVesselPanel, closeVesselPanel } from './vessel-panel.js';
+import { showPortPanel, hidePortPanel, closePortPanel } from './port-panel.js';
+import { hideRoutePanel, closeRoutePanel } from './route-vessels-panel.js';
 import { initializePanelDrag } from './panel-drag.js';
 import { filterVessels, filterPorts, getVesselFilterOptions, getPortFilterOptions } from './filters.js';
-import { showSideNotification } from '../utils.js';
+import { showSideNotification, isMobileDevice } from '../utils.js';
 
 // Map instance
 let map = null;
+
+/**
+ * Returns the map instance for use in other modules
+ * @returns {L.Map|null} The Leaflet map instance
+ */
+export function getMap() {
+  return map;
+}
 
 // Layer groups
 let vesselLayer = null;
@@ -23,8 +32,9 @@ let routeLayer = null;
 let weatherLayer = null;
 
 // Marker cluster groups
-let vesselClusterGroup = null;
-let portClusterGroup = null;
+let vesselClusterGroup = null; // For vessels enroute
+let portClusterGroup = null; // For ports (DEPRECATED - now using portLocationClusterGroup)
+let portLocationClusterGroup = null; // For ports + vessels in port (combined to prevent overlap)
 
 // Current state
 let currentPortFilter = localStorage.getItem('harborMapPortFilter') || 'my_ports'; // Port filter
@@ -61,6 +71,22 @@ let poiLayerControl = null;
 let currentVessels = [];
 let currentPorts = [];
 let currentRouteFilter = localStorage.getItem('harborMapRouteFilter') || null; // null = show all, string = show specific route
+
+/**
+ * Gets current ports data
+ * @returns {Array<Object>} Current ports array
+ */
+export function getCurrentPorts() {
+  return currentPorts;
+}
+
+// Previous state (for restoration when panel closes)
+let previousMapState = {
+  vessels: [],
+  ports: [],
+  zoom: null,
+  center: null
+};
 
 // Tile layers
 let currentTileLayer = null;
@@ -161,13 +187,19 @@ export function initMap(containerId) {
   map = L.map(containerId, {
     center: [20, 0], // Center on northern hemisphere (20° North, 0° longitude)
     zoom: 1.50,
-    minZoom: 1.50, // Minimum zoom = initial zoom (can't zoom out further than world view)
+    minZoom: 1.50, // Minimum zoom = initial zoom (can't zoom out further)
     maxZoom: 18,
+    zoomDelta: 0.1, // Zoom in 0.1 steps instead of 1.0
+    zoomSnap: 0.1, // Allow fractional zoom levels (0.1 precision)
+    wheelPxPerZoomLevel: 120, // Mouse wheel sensitivity (higher = slower zooming)
+    scrollWheelZoom: true, // Enable scroll wheel zoom
     attributionControl: false, // Disable attribution control
-    worldCopyJump: true, // Enable world wrapping (jump to copy when panning)
-    maxBounds: [[-90, -180], [90, 180]], // Restrict to valid lat/lon
-    maxBoundsViscosity: 1.0 // Make bounds hard (can't drag outside)
+    worldCopyJump: true // Enable world wrapping (jump to copy when panning)
   });
+
+  // Set maxBounds AFTER initialization to avoid Leaflet warning
+  map.setMaxBounds([[-90, -180], [90, 180]]);
+  map.options.maxBoundsViscosity = 0.8; // Allow some dragging beyond bounds when panel is open
 
   // Add saved tile layer (or default to dark)
   currentTileLayer = L.tileLayer(tileLayers[currentMapStyle].url, {
@@ -180,6 +212,16 @@ export function initMap(containerId) {
   const mapContainer = map.getContainer();
   const backgroundColor = currentMapStyle === 'standard' ? '#e0e0e0' : '#1f1f1f';
   mapContainer.style.backgroundColor = backgroundColor;
+
+  // Add mobile class to overlay for mobile-specific styling
+  const isMobile = isMobileDevice();
+  if (isMobile) {
+    const overlay = document.querySelector('.harbor-map-overlay');
+    if (overlay) {
+      overlay.classList.add('mobile-view');
+      console.log('[Harbor Map] Mobile view detected - applying mobile layout');
+    }
+  }
 
   // Initialize layer groups
   vesselLayer = L.layerGroup().addTo(map);
@@ -255,8 +297,39 @@ export function initMap(containerId) {
     }
   });
 
+  // Combined cluster group for ports + vessels in port (to prevent overlap)
+  portLocationClusterGroup = L.markerClusterGroup({
+    maxClusterRadius: 30, // Larger radius to catch overlapping port + vessel markers
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: true,
+    iconCreateFunction: function(cluster) {
+      const markers = cluster.getAllChildMarkers();
+      let portCount = 0;
+      let vesselCount = 0;
+
+      // Count ports vs vessels in cluster
+      markers.forEach(marker => {
+        const className = marker.options.icon.options.className;
+        if (className && className.includes('port-icon')) {
+          portCount++;
+        } else {
+          vesselCount++;
+        }
+      });
+
+      // Show combined count - blue color like normal port clusters
+      const count = cluster.getChildCount();
+      return L.divIcon({
+        html: `<div style="background-color: #bfdbfe; opacity: 0.85; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #1e3a8a; font-weight: 600; font-size: 10px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 2px 8px rgba(0,0,0,0.15);">${count}</div>`,
+        className: 'port-location-cluster-icon',
+        iconSize: L.point(20, 20)
+      });
+    }
+  });
+
   vesselLayer.addLayer(vesselClusterGroup);
-  portLayer.addLayer(portClusterGroup);
+  portLayer.addLayer(portLocationClusterGroup); // Use combined cluster instead of portClusterGroup
 
   // Add custom controls
   addCustomControls();
@@ -270,43 +343,35 @@ export function initMap(containerId) {
     }
 
     // Add long-press handler for weather info
-    let pressTimer = null;
-    let pressStartPos = null;
-    const LONG_PRESS_DURATION = 700; // milliseconds
-    const MAX_MOVE_DISTANCE = 10; // pixels
+    let longPressTimer = null;
+    let longPressLatlng = null;
+    const LONG_PRESS_DELAY = 700; // milliseconds
 
-    const handlePressStart = (e) => {
-      pressStartPos = e.latlng;
-      pressTimer = setTimeout(async () => {
-        await showWeatherInfo(e.latlng);
-        pressTimer = null;
-      }, LONG_PRESS_DURATION);
+    const handleMouseDown = (e) => {
+      longPressLatlng = e.latlng;
+      longPressTimer = setTimeout(async () => {
+        await showWeatherInfo(longPressLatlng);
+        longPressTimer = null;
+      }, LONG_PRESS_DELAY);
     };
 
-    const handlePressEnd = (e) => {
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
+    const handleMouseUp = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
       }
     };
 
-    const handlePressMove = (e) => {
-      // Cancel if mouse/finger moved too much
-      if (pressTimer && pressStartPos) {
-        const distance = map.distance(pressStartPos, e.latlng);
-        if (distance > MAX_MOVE_DISTANCE) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-        }
+    const handleMouseMove = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
       }
     };
 
-    map.on('mousedown', handlePressStart);
-    map.on('mouseup', handlePressEnd);
-    map.on('mousemove', handlePressMove);
-    map.on('touchstart', handlePressStart);
-    map.on('touchend', handlePressEnd);
-    map.on('touchmove', handlePressMove);
+    map.on('mousedown', handleMouseDown);
+    map.on('mouseup', handleMouseUp);
+    map.on('mousemove', handleMouseMove);
   }
 
   // Initialize panel dragging
@@ -398,9 +463,9 @@ async function showWeatherInfo(latlng, tooltipContent = null) {
     const temp = weather.temperature.toFixed(1);
     const wind = weather.windspeed.toFixed(0);
 
-    // Theme-based colors - match tooltip styles exactly
+    // Theme-based colors - more transparency for better map visibility
     const isDark = currentMapStyle === 'dark' || currentMapStyle === 'satellite';
-    const bgColor = isDark ? 'rgba(31, 31, 31, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+    const bgColor = isDark ? 'rgba(31, 31, 31, 0.7)' : 'rgba(255, 255, 255, 0.75)';
     const borderColor = isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)';
     const boxShadow = isDark ? '0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.15)';
     const textColor = isDark ? '#e5e7eb' : '#1f2937';
@@ -626,7 +691,8 @@ function addCustomControls() {
       L.DomEvent.disableClickPropagation(container);
 
       // Add change listener
-      container.querySelector('select').addEventListener('change', async (e) => {
+      const selectElement = container.querySelector('select');
+      selectElement.addEventListener('change', async (e) => {
         await setRouteFilter(e.target.value);
       });
 
@@ -886,7 +952,7 @@ function addCustomControls() {
 
       const updateZoom = () => {
         const zoom = map.getZoom();
-        container.innerHTML = `Zoom: ${zoom}`;
+        container.innerHTML = `Zoom: ${zoom.toFixed(1)}`;
       };
 
       updateZoom();
@@ -1251,16 +1317,94 @@ function addCustomControls() {
   map.addControl(new MuseumsLayerControl());
   map.addControl(new WrecksLayerControl());
 
-  // Add Refresh Control last (at bottom)
+  // Add Refresh Control
   map.addControl(new RefreshControl());
 
-  // Add Zoom Display Control (bottom left)
-  map.addControl(new ZoomDisplayControl());
+  // Forecast Calendar Control - same structure as Refresh
+  const ForecastControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function() {
+      const container = L.DomUtil.create('div', 'leaflet-control-custom leaflet-control-forecast');
+      container.innerHTML = '<button title="Forecast Calendar">📅</button>';
+      L.DomEvent.disableClickPropagation(container);
+      container.querySelector('button').addEventListener('click', () => {
+        if (window.harborMap) {
+          if (typeof window.harborMap.closeVesselPanel === 'function') window.harborMap.closeVesselPanel();
+          if (typeof window.harborMap.closePortPanel === 'function') window.harborMap.closePortPanel();
+        }
+        if (window.showForecastOverlay) window.showForecastOverlay();
+      });
+      return container;
+    }
+  });
 
-  // Top right controls (filter dropdowns)
+  map.addControl(new ForecastControl());
+
+  // Logbook Control - same structure as Refresh
+  const LogbookControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function() {
+      const container = L.DomUtil.create('div', 'leaflet-control-custom leaflet-control-logbook');
+      container.innerHTML = '<button title="Captain\'s Logbook">📋</button>';
+      L.DomEvent.disableClickPropagation(container);
+      container.querySelector('button').addEventListener('click', () => {
+        if (window.harborMap) {
+          if (typeof window.harborMap.closeVesselPanel === 'function') window.harborMap.closeVesselPanel();
+          if (typeof window.harborMap.closePortPanel === 'function') window.harborMap.closePortPanel();
+        }
+        if (window.showLogbookOverlay) window.showLogbookOverlay();
+      });
+      return container;
+    }
+  });
+
+  // Settings Control - same structure as Refresh
+  const SettingsControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function() {
+      const container = L.DomUtil.create('div', 'leaflet-control-custom leaflet-control-settings-btn');
+      container.innerHTML = '<button title="Settings">⚙️</button>';
+      L.DomEvent.disableClickPropagation(container);
+      container.querySelector('button').addEventListener('click', () => {
+        if (window.harborMap) {
+          if (typeof window.harborMap.closeVesselPanel === 'function') window.harborMap.closeVesselPanel();
+          if (typeof window.harborMap.closePortPanel === 'function') window.harborMap.closePortPanel();
+        }
+        if (window.showSettings) window.showSettings();
+      });
+      return container;
+    }
+  });
+
+  // Docs Control - same structure as Refresh
+  const DocsControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd: function() {
+      const container = L.DomUtil.create('div', 'leaflet-control-custom leaflet-control-docs');
+      container.innerHTML = '<button title="Documentation">📖</button>';
+      L.DomEvent.disableClickPropagation(container);
+      container.querySelector('button').addEventListener('click', () => {
+        if (window.harborMap) {
+          if (typeof window.harborMap.closeVesselPanel === 'function') window.harborMap.closeVesselPanel();
+          if (typeof window.harborMap.closePortPanel === 'function') window.harborMap.closePortPanel();
+        }
+        if (window.showDocsOverlay) window.showDocsOverlay();
+      });
+      return container;
+    }
+  });
+
+  map.addControl(new LogbookControl());
+  map.addControl(new SettingsControl());
+  map.addControl(new DocsControl());
+
+  // Top right controls (filter dropdowns) - THESE MUST BE LAST so they don't interfere with left controls
   map.addControl(new RouteFilterControl());
   map.addControl(new VesselFilterControl());
   map.addControl(new PortFilterControl());
+
+  // Add Zoom Display Control (bottom left) - add AFTER filters
+  map.addControl(new ZoomDisplayControl());
 
   // Auto-reload wrecks when zooming or moving map (with debouncing)
   map.on('zoomend', () => {
@@ -1428,6 +1572,8 @@ function changeTileLayer(layerKey) {
  * renderVessels([{ id: 1234, position: { lat: -27.38, lon: 153.12 }, status: 'enroute', ... }]);
  */
 export function renderVessels(vessels) {
+  // Don't clear portLocationClusterGroup here - it will be cleared before both
+  // renderVessels() and renderPorts() are called, and ports need to be added after vessels
   vesselClusterGroup.clearLayers();
 
   console.log(`[Harbor Map] Rendering ${vessels.length} vessels`);
@@ -1463,14 +1609,10 @@ export function renderVessels(vessels) {
     // Create icon with type, status, and heading
     const icon = createVesselIcon(vessel.status, vesselType, heading);
 
-    // Add offset for vessels in port to prevent overlap with port marker
-    // Shift slightly northeast to make both clickable
-    let vesselLat = vessel.position.lat;
-    let vesselLon = vessel.position.lon;
-    if (vessel.status === 'port' || vessel.status === 'anchor') {
-      vesselLat += 0.003; // ~300m north
-      vesselLon += 0.003; // ~300m east
-    }
+    // Use exact coordinates (no offset for vessels in port)
+    // Vessels in port will have same coordinates as port and will be clustered together
+    const vesselLat = vessel.position.lat;
+    const vesselLon = vessel.position.lon;
 
     // Create marker
     const marker = L.marker([vesselLat, vesselLon], { icon });
@@ -1495,24 +1637,30 @@ export function renderVessels(vessels) {
 
     const vesselTooltipContent = `
       <strong>${vessel.name}</strong><br>
-      Status: ${vessel.status}${vessel.eta !== 'N/A' ? ` | ETA: ${vessel.eta}` : ''}<br>
+      Status: ${vessel.status}${vessel.status === 'enroute' && vessel.route_speed ? ` | Speed: ${vessel.route_speed} kn` : ''}${vessel.eta !== 'N/A' ? ` | ETA: ${vessel.eta}` : ''}<br>
       Cargo: ${cargoDisplay}
     `;
 
-    // Bind tooltip (hover) with vessel info
+    // Always bind tooltip for mouseover (NOT for click)
     marker.bindTooltip(vesselTooltipContent, {
       direction: 'auto',
       offset: [0, -10]
     });
 
-    // Click handler - close tooltip, open vessel panel and show combined weather popup
-    marker.on('click', async (e) => {
+    // Click handler - show vessel detail panel
+    marker.on('click', () => {
       marker.closeTooltip();
-      window.harborMap.selectVesselFromMap(vessel.id);
-      await showWeatherInfo(e.latlng, vesselTooltipContent);
+      selectVessel(vessel.id);
     });
 
-    vesselClusterGroup.addLayer(marker);
+    // Add to appropriate cluster group
+    // Vessels in port/anchor -> portLocationClusterGroup (clustered with port)
+    // Vessels enroute -> vesselClusterGroup (separate)
+    if (vessel.status === 'port' || vessel.status === 'anchor') {
+      portLocationClusterGroup.addLayer(marker);
+    } else {
+      vesselClusterGroup.addLayer(marker);
+    }
   });
 
   console.log(`[Harbor Map] Rendered ${vessels.length - skipped} vessels, skipped ${skipped} without position`);
@@ -1528,7 +1676,9 @@ export function renderVessels(vessels) {
  * renderPorts([{ code: 'AUBNE', lat: -27.38, lon: 153.12, demandLevel: 'high', ... }]);
  */
 export function renderPorts(ports) {
-  portClusterGroup.clearLayers();
+  // Don't clear portLocationClusterGroup here - vessels in port have already been added
+  // by renderVessels(), and we want to add ports to the same cluster group
+  // portLocationClusterGroup.clearLayers();  // DON'T DO THIS!
 
   console.log(`[Harbor Map] Rendering ${ports.length} ports`);
   if (ports.length > 0) {
@@ -1575,20 +1725,19 @@ export function renderPorts(ports) {
       icon: portIcons.default
     });
 
-    // Bind tooltip (hover) with port info
+    // Always bind tooltip for mouseover (NOT for click)
     marker.bindTooltip(portTooltipContent, {
       direction: 'auto',
       offset: [0, -10]
     });
 
-    // Click handler - close tooltip, select port and show combined weather popup
-    marker.on('click', async (e) => {
+    // Click handler - show port detail panel
+    marker.on('click', () => {
       marker.closeTooltip();
       selectPort(port.code);
-      await showWeatherInfo(e.latlng, portTooltipContent);
     });
 
-    portClusterGroup.addLayer(marker);
+    portLocationClusterGroup.addLayer(marker);
   });
 }
 
@@ -1725,10 +1874,22 @@ export function drawRoute(route, ports = [], autoZoom = true) {
 
   // Fit map to route bounds (only if autoZoom is true)
   if (autoZoom) {
-    map.fitBounds(polyline.getBounds(), {
-      paddingTopLeft: [50, 50],
-      paddingBottomRight: [325, 50] // 275px panel + 50px extra padding
-    });
+    const isMobile = isMobileDevice();
+
+    if (isMobile) {
+      // Mobile: More padding and maxZoom to see full route
+      map.fitBounds(polyline.getBounds(), {
+        paddingTopLeft: [20, 80],
+        paddingBottomRight: [20, 450],
+        maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+      });
+    } else {
+      // Desktop: Right panel padding (175px panel + 50px extra + more space)
+      map.fitBounds(polyline.getBounds(), {
+        paddingTopLeft: [50, 50],
+        paddingBottomRight: [300, 50]
+      });
+    }
   }
 }
 
@@ -1756,6 +1917,16 @@ export async function setPortFilter(filter) {
   localStorage.setItem('harborMapPortFilter', filter);
   console.log(`[Harbor Map] Port filter changed to: ${filter} (client-side)`);
 
+  // Close all panels and reset selection when manually changing filter
+  await closeAllPanels();
+  selectedVesselId = null;
+  selectedPortCode = null;
+
+  // Remove fullscreen when manually changing filters
+  if (isMobileDevice()) {
+    document.body.classList.remove('map-fullscreen');
+  }
+
   // Apply filter client-side (no API call)
   await applyFiltersAndRender();
 }
@@ -1773,6 +1944,16 @@ export async function setVesselFilter(filter) {
   localStorage.setItem('harborMapVesselFilter', filter);
   console.log(`[Harbor Map] Vessel filter changed to: ${filter} (client-side)`);
 
+  // Close all panels and reset selection when manually changing filter
+  await closeAllPanels();
+  selectedVesselId = null;
+  selectedPortCode = null;
+
+  // Remove fullscreen when manually changing filters
+  if (isMobileDevice()) {
+    document.body.classList.remove('map-fullscreen');
+  }
+
   // Apply filter client-side (no API call)
   await applyFiltersAndRender();
 }
@@ -1784,6 +1965,21 @@ export async function setVesselFilter(filter) {
  * @returns {Promise<void>}
  */
 async function applyFiltersAndRender() {
+  // IMPORTANT: Re-read filter values from localStorage to ensure they're up to date
+  // This prevents filter state loss during automatic refreshes
+  currentVesselFilter = localStorage.getItem('harborMapVesselFilter') || 'all_vessels';
+  currentPortFilter = localStorage.getItem('harborMapPortFilter') || 'my_ports';
+
+  // Sync dropdown values with current filter state
+  const vesselFilterSelect = document.getElementById('vesselFilterSelect');
+  const portFilterSelect = document.getElementById('portFilterSelect');
+  if (vesselFilterSelect && vesselFilterSelect.value !== currentVesselFilter) {
+    vesselFilterSelect.value = currentVesselFilter;
+  }
+  if (portFilterSelect && portFilterSelect.value !== currentPortFilter) {
+    portFilterSelect.value = currentPortFilter;
+  }
+
   // Debug: Check raw data
   const assignedPortsCount = rawPorts.filter(p => p.isAssigned === true).length;
   console.log(`[Harbor Map] Raw data - Total Ports: ${rawPorts.length}, Assigned Ports: ${assignedPortsCount}, Total Vessels: ${rawVessels.length}`);
@@ -1809,10 +2005,34 @@ async function applyFiltersAndRender() {
   // Update route dropdown
   updateRouteDropdown();
 
+  // Check if there's an active selection (vessel, port, or route panel open)
+  const vesselPanelOpen = document.getElementById('vessel-detail-panel')?.classList.contains('active');
+  const portPanelOpen = document.getElementById('port-detail-panel')?.classList.contains('active');
+  const routePanelOpen = document.getElementById('route-vessels-panel')?.classList.contains('active');
+  const hasActiveSelection = selectedVesselId !== null || selectedPortCode !== null ||
+                             vesselPanelOpen || portPanelOpen || routePanelOpen;
+
+  if (hasActiveSelection) {
+    console.log('[Harbor Map] Active selection detected - skipping render to preserve current view');
+
+    // IMPORTANT: Update previousMapState with filtered data
+    // This ensures when user closes panel, it shows the CURRENT filter, not the old one
+    previousMapState.vessels = [...filteredVessels];
+    previousMapState.ports = [...filteredPorts];
+
+    // Raw data and filters are updated in background, but DON'T re-render map or reset selection
+    // This allows background data refresh without disrupting user's current view
+    return;
+  }
+
   // Apply route filter if active
   const vesselsToRender = currentRouteFilter
     ? currentVessels.filter(v => v.route_name === currentRouteFilter)
     : currentVessels;
+
+  // Clear all cluster groups before rendering
+  vesselClusterGroup.clearLayers();
+  portLocationClusterGroup.clearLayers();
 
   // If route filter is active, restore full route visualization
   if (currentRouteFilter && vesselsToRender.length > 0) {
@@ -1856,8 +2076,31 @@ async function applyFiltersAndRender() {
     }
   } else {
     // No route filter active
-    renderVessels(vesselsToRender);
-    renderPorts(filteredPorts);
+
+    // Logic: Only show BOTH when default filters are selected
+    // Whitelist for showing both vessels AND ports
+    const showBothVesselFilters = ['all_vessels', 'all_my_vessels'];
+    const showBothPortFilters = ['all_ports', 'my_ports'];
+
+    const showBothVessels = showBothVesselFilters.includes(currentVesselFilter);
+    const showBothPorts = showBothPortFilters.includes(currentPortFilter);
+
+    if (!showBothVessels) {
+      // Any specific vessel filter (tanker, arrived, etc.) → hide ports
+      renderVessels(vesselsToRender);
+      renderPorts([]);
+      console.log(`[Harbor Map] Vessel filter "${currentVesselFilter}" active - hiding ports`);
+    } else if (!showBothPorts) {
+      // Any specific port filter → hide vessels
+      renderVessels([]);
+      renderPorts(filteredPorts);
+      console.log(`[Harbor Map] Port filter "${currentPortFilter}" active - hiding vessels`);
+    } else {
+      // Both on default (all_vessels/all_my_vessels + all_ports/my_ports) → show both
+      renderVessels(vesselsToRender);
+      renderPorts(filteredPorts);
+    }
+
     clearRoute();
   }
 
@@ -1918,12 +2161,21 @@ export async function loadOverview() {
 /**
  * Closes all open panels (vessel, port, route)
  * Ensures only one panel is open at a time
+ * Only hides panels, does NOT remove fullscreen or deselect
+ * This allows seamless panel transitions without fullscreen flicker
  * @returns {Promise<void>}
  */
 export async function closeAllPanels() {
-  await closeVesselPanel();
-  await closePortPanel();
-  await closeRoutePanel();
+  // Close weather popup
+  if (map) {
+    map.closePopup();
+  }
+
+  // Only HIDE panels (don't remove fullscreen or call deselectAll)
+  // This keeps fullscreen active during panel transitions
+  hideVesselPanel();
+  hidePortPanel();
+  hideRoutePanel();
 }
 
 /**
@@ -1937,6 +2189,14 @@ export async function closeAllPanels() {
  */
 export async function selectVessel(vesselId) {
   try {
+    // Save current state BEFORE making changes
+    previousMapState = {
+      vessels: [...currentVessels],
+      ports: [...currentPorts],
+      zoom: map.getZoom(),
+      center: map.getCenter()
+    };
+
     selectedVesselId = vesselId;
     selectedPortCode = null;
 
@@ -1947,81 +2207,93 @@ export async function selectVessel(vesselId) {
       hasRoute: !!data.route
     });
 
-    // Clear vessel markers (hide all vessels)
+    // Close all panels first to avoid conflicts
+    await closeAllPanels();
+
+    // Clear ALL markers (vessels and ports)
     vesselClusterGroup.clearLayers();
+    portLocationClusterGroup.clearLayers();
+    clearRoute();
 
-    // Render the selected vessel on the map
+    // Render ONLY the selected vessel on the map
     if (data.vessel && data.vessel.position) {
-      // Get vessel type and create icon (NO rotation for selected vessel)
+      // Get vessel type
       const vesselType = getVesselType(data.vessel.capacity_type);
-      const icon = createVesselIcon(data.vessel.status, vesselType, 0); // heading = 0 (no rotation)
 
-      // Add offset for vessels in port to prevent overlap with port marker
-      let vesselLat = data.vessel.position.lat;
-      let vesselLon = data.vessel.position.lon;
-      if (data.vessel.status === 'port' || data.vessel.status === 'anchor') {
-        vesselLat += 0.003; // ~300m north
-        vesselLon += 0.003; // ~300m east
-      }
-
-      // Create marker for selected vessel
-      const vesselMarker = L.marker([vesselLat, vesselLon], { icon });
-
-      // Bind tooltip
-      vesselMarker.bindTooltip(`
-        <strong>${data.vessel.name}</strong><br>
-        Status: ${data.vessel.status}<br>
-        ${data.vessel.eta !== 'N/A' ? `ETA: ${data.vessel.eta}<br>` : ''}
-        Cargo: ${data.vessel.formattedCargo || 'N/A'}
-      `, {
-        direction: 'top',
-        offset: [0, -10]
-      });
-
-      vesselClusterGroup.addLayer(vesselMarker);
-    }
-
-    // If vessel is in port, highlight the current port
-    if ((data.vessel.status === 'port' || data.vessel.status === 'anchor') && data.vessel.port_code) {
-      console.log('[Harbor Map] Vessel in port, highlighting port:', data.vessel.port_code);
-
-      // Find the port in reachable ports or current ports
-      let currentPort = data.reachablePorts.find(p => p.code === data.vessel.port_code);
-      if (!currentPort) {
-        // Try to find in current ports
-        currentPort = currentPorts.find(p => p.code === data.vessel.port_code);
-      }
-
-      // If we found the port, make sure it's rendered
-      if (currentPort) {
-        // Add current port to reachable ports if not already there
-        const portExists = data.reachablePorts.some(p => p.code === data.vessel.port_code);
-        if (!portExists) {
-          data.reachablePorts.unshift(currentPort); // Add at beginning
+      // Calculate heading if vessel has route
+      let heading = 0;
+      if (data.route && data.route.path && data.route.path.length >= 2) {
+        const path = data.route.path;
+        // Find current position in path and calculate heading to next point
+        for (let i = 0; i < path.length - 1; i++) {
+          const point = path[i];
+          if (Math.abs(point.lat - data.vessel.position.lat) < 0.01 && Math.abs(point.lon - data.vessel.position.lon) < 0.01) {
+            heading = calculateHeading(point, path[i + 1]);
+            break;
+          }
+        }
+        // If not found in path, use first two points
+        if (heading === 0 && path.length >= 2) {
+          heading = calculateHeading(path[0], path[1]);
         }
       }
+
+      // Create icon with heading (vessel rotation in travel direction)
+      const icon = createVesselIcon(data.vessel.status, vesselType, heading);
+
+      // Use exact coordinates (no offset)
+      const vesselLat = data.vessel.position.lat;
+      const vesselLon = data.vessel.position.lon;
+
+      // Create marker for selected vessel (no tooltip - info is in panel)
+      const vesselMarker = L.marker([vesselLat, vesselLon], { icon });
+
+      // Add to appropriate cluster group based on status
+      if (data.vessel.status === 'port' || data.vessel.status === 'anchor') {
+        portLocationClusterGroup.addLayer(vesselMarker);
+      } else {
+        vesselClusterGroup.addLayer(vesselMarker);
+      }
     }
 
-    // Render only reachable ports (including current port if vessel is in port)
-    renderPorts(data.reachablePorts);
-
-    // Draw route if vessel is sailing (without auto-zoom)
+    // Draw route if vessel has one (this will draw the 2 port markers)
+    // drawRoute() draws: blue line + red origin marker + green destination marker
     if (data.route) {
       // Prefer assignedPorts (correct demand) over allPorts (no demand for non-assigned)
       const portsForDemand = data.assignedPorts || data.allPorts;
-      drawRoute(data.route, portsForDemand, false);
+      drawRoute(data.route, portsForDemand, false); // false = no auto-zoom
+    } else if ((data.vessel.status === 'port' || data.vessel.status === 'anchor') && data.vessel.port_code) {
+      // If vessel in port but no route: show ONLY current port
+      console.log('[Harbor Map] Vessel in port (no route), showing only current port:', data.vessel.port_code);
+
+      const currentPort = data.reachablePorts.find(p => p.code === data.vessel.port_code) ||
+                         currentPorts.find(p => p.code === data.vessel.port_code);
+
+      if (currentPort) {
+        renderPorts([currentPort]); // Only render the ONE port vessel is currently in
+      }
     }
+    // If no route and not in port: show nothing (just the vessel)
 
     // Zoom to show route (prioritize route over all ports)
+    const isMobile = isMobileDevice();
+
     if (data.route && data.route.path) {
       const bounds = L.latLngBounds();
       data.route.path.forEach(p => bounds.extend([p.lat, p.lon]));
 
-      // Padding: top, right (account for 275px panel), bottom, left
-      map.fitBounds(bounds, {
-        paddingTopLeft: [50, 50],
-        paddingBottomRight: [325, 50] // 275px panel + 50px extra padding
-      });
+      if (isMobile) {
+        map.fitBounds(bounds, {
+          paddingTopLeft: [20, 80],
+          paddingBottomRight: [20, 450],
+          maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+        });
+      } else {
+        map.fitBounds(bounds, {
+          paddingTopLeft: [50, 50],
+          paddingBottomRight: [300, 50] // More padding for panel + dragging space
+        });
+      }
     } else if (data.reachablePorts.length > 0) {
       // Fallback: fit all reachable ports if no route
       const bounds = L.latLngBounds();
@@ -2030,10 +2302,19 @@ export async function selectVessel(vesselId) {
           bounds.extend([parseFloat(port.lat), parseFloat(port.lon)]);
         }
       });
-      map.fitBounds(bounds, {
-        paddingTopLeft: [50, 50],
-        paddingBottomRight: [325, 50]
-      });
+
+      if (isMobile) {
+        map.fitBounds(bounds, {
+          paddingTopLeft: [20, 80],
+          paddingBottomRight: [20, 450],
+          maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+        });
+      } else {
+        map.fitBounds(bounds, {
+          paddingTopLeft: [50, 50],
+          paddingBottomRight: [300, 50] // More padding for panel + dragging space
+        });
+      }
     } else if (data.vessel && data.vessel.position) {
       // Fallback: center on vessel if no route or ports
       map.setView([data.vessel.position.lat, data.vessel.position.lon], map.getZoom(), {
@@ -2044,8 +2325,7 @@ export async function selectVessel(vesselId) {
       });
     }
 
-    // Close all panels first, then show vessel panel
-    await closeAllPanels();
+    // Show vessel panel (closeAllPanels already called at the start)
     showVesselPanel(data.vessel);
   } catch (error) {
     console.error(`Error selecting vessel ${vesselId}:`, error);
@@ -2063,6 +2343,14 @@ export async function selectVessel(vesselId) {
  */
 export async function selectPort(portCode) {
   try {
+    // Save current state BEFORE making changes
+    previousMapState = {
+      vessels: [...currentVessels],
+      ports: [...currentPorts],
+      zoom: map.getZoom(),
+      center: map.getCenter()
+    };
+
     console.log(`[Harbor Map] Port ${portCode} clicked`);
     selectedPortCode = portCode;
     selectedVesselId = null;
@@ -2079,19 +2367,60 @@ export async function selectPort(portCode) {
       }
     });
 
-    // Center port in the middle of visible area (left 2/3 not covered by panel)
+    // Close all panels first
+    await closeAllPanels();
+
+    // Clear ALL markers
+    vesselClusterGroup.clearLayers();
+    portLocationClusterGroup.clearLayers();
+    clearRoute();
+
+    // Render ONLY the selected port
+    renderPorts([data.port]);
+
+    // Collect ALL vessels related to this port (in, to, from)
+    const allRelatedVessels = [
+      ...data.vessels.inPort,
+      ...data.vessels.toPort,
+      ...data.vessels.fromPort
+    ];
+
+    // Render ONLY the related vessels
+    renderVessels(allRelatedVessels);
+
+    // Zoom to fit port + all related vessels
+    const isMobile = isMobileDevice();
+    const bounds = L.latLngBounds();
+
+    // Add port to bounds
     if (data.port.lat && data.port.lon) {
-      // First zoom to port with panel padding (like routes do)
-      map.setView([data.port.lat, data.port.lon], map.getZoom(), {
-        animate: true,
-        duration: 0.5,
-        paddingTopLeft: [50, 50],
-        paddingBottomRight: [325, 50] // 275px panel + 50px padding
-      });
+      bounds.extend([data.port.lat, data.port.lon]);
     }
 
-    // Close all panels first, then show port panel
-    await closeAllPanels();
+    // Add all vessels to bounds
+    allRelatedVessels.forEach(vessel => {
+      if (vessel.position && vessel.position.lat && vessel.position.lon) {
+        bounds.extend([vessel.position.lat, vessel.position.lon]);
+      }
+    });
+
+    // Fit bounds with appropriate padding
+    if (bounds.isValid()) {
+      if (isMobile) {
+        map.fitBounds(bounds, {
+          paddingTopLeft: [20, 80],
+          paddingBottomRight: [20, 450],
+          maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+        });
+      } else {
+        map.fitBounds(bounds, {
+          paddingTopLeft: [50, 50],
+          paddingBottomRight: [300, 50] // More padding for panel + dragging space
+        });
+      }
+    }
+
+    // Show port panel
     showPortPanel(data.port, data.vessels);
   } catch (error) {
     console.error(`Error selecting port ${portCode}:`, error);
@@ -2106,7 +2435,38 @@ export async function selectPort(portCode) {
  * await deselectAll();
  */
 export async function deselectAll() {
-  await loadOverview();
+  // Reset selection state
+  selectedVesselId = null;
+  selectedPortCode = null;
+
+  // Clear current markers
+  vesselClusterGroup.clearLayers();
+  portLocationClusterGroup.clearLayers();
+  clearRoute();
+
+  // Save zoom and center if we had previous state
+  const previousZoom = previousMapState.zoom;
+  const previousCenter = previousMapState.center;
+
+  // Clear previous state
+  previousMapState = {
+    vessels: [],
+    ports: [],
+    zoom: null,
+    center: null
+  };
+
+  // IMPORTANT: Always use applyFiltersAndRender() to ensure filters are applied
+  // This ensures that the current filter selection is respected when closing panels
+  await applyFiltersAndRender();
+
+  // Restore zoom and center if available
+  if (previousZoom && previousCenter) {
+    map.setView(previousCenter, previousZoom, {
+      animate: true,
+      duration: 0.5
+    });
+  }
 }
 
 /**
@@ -2154,7 +2514,7 @@ export async function getVesselById(vesselId, skipCache = false) {
   // Refresh overview from server with cache-busting timestamp
   try {
     const timestamp = Date.now();
-    const response = await fetch(window.apiUrl(`/api/harbor-map/overview?filter=${currentFilter}&_=${timestamp}`));
+    const response = await fetch(window.apiUrl(`/api/harbor-map/overview?filter=all_ports&_=${timestamp}`));
 
     if (!response.ok) {
       throw new Error(`Failed to fetch harbor map overview: ${response.statusText}`);
@@ -2240,6 +2600,24 @@ function updateRouteDropdown() {
     currentRouteFilter = null;
     routeSelect.value = '';
   }
+
+  // Set width based on longest option text
+  const allOptions = ['All Routes', ...sortedRoutes];
+  let maxWidth = 0;
+  const tempSpan = document.createElement('span');
+  tempSpan.style.cssText = 'position: absolute; visibility: hidden; white-space: nowrap; font-size: 13px; font-weight: 500;';
+  document.body.appendChild(tempSpan);
+
+  allOptions.forEach(text => {
+    tempSpan.textContent = text;
+    const width = tempSpan.offsetWidth;
+    if (width > maxWidth) maxWidth = width;
+  });
+
+  document.body.removeChild(tempSpan);
+
+  // Set width: longest text + 4px left padding + 21px right padding (for space)
+  routeSelect.style.width = `${maxWidth + 25}px`;
 }
 
 /**
@@ -2264,12 +2642,12 @@ async function setRouteFilter(routeName) {
 
   console.log(`[Harbor Map] Route filter changed to: ${currentRouteFilter || 'All Routes'}`);
 
-  // Filter vessels
+  // Filter vessels - when route is selected, use ALL vessels (ignore vessel filter)
   const vesselsToRender = currentRouteFilter
-    ? currentVessels.filter(v => v.route_name === currentRouteFilter)
+    ? rawVessels.filter(v => v.route_name === currentRouteFilter)
     : currentVessels;
 
-  console.log(`[Harbor Map] Rendering ${vesselsToRender.length} vessels (filtered by route)`);
+  console.log(`[Harbor Map] Rendering ${vesselsToRender.length} vessels (filtered by route, ignoring vessel filter)`);
 
   if (currentRouteFilter && vesselsToRender.length > 0) {
     // Close all other panels before showing route panel
@@ -2295,21 +2673,30 @@ async function setRouteFilter(routeName) {
         destination: actualDestination
       };
 
-      // Filter ports to show only origin and destination
-      const routePorts = currentPorts.filter(p =>
+      // Filter ports to show only origin and destination (use rawPorts to get all ports)
+      const routePorts = rawPorts.filter(p =>
         p.code === route.origin || p.code === route.destination
       );
+
+      // Clear all markers before rendering
+      vesselClusterGroup.clearLayers();
+      portLocationClusterGroup.clearLayers();
 
       // Render vessels and route ports
       renderVessels(vesselsToRender);
       renderPorts(routePorts);
 
       // Draw route path (with auto-zoom)
-      drawRoute(route, currentPorts, true);
+      drawRoute(route, rawPorts, true);
 
       console.log(`[Harbor Map] Route drawn: ${route.origin} → ${route.destination}, ${route.path.length} points`);
     } else {
       console.warn('[Harbor Map] No active route available for vessel');
+
+      // Clear all markers before rendering
+      vesselClusterGroup.clearLayers();
+      portLocationClusterGroup.clearLayers();
+
       renderVessels(vesselsToRender);
       renderPorts(currentPorts);
       clearRoute();

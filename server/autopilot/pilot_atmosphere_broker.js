@@ -12,7 +12,7 @@ const state = require('../state');
 const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
 const config = require('../config');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const DEBUG_MODE = config.DEBUG_MODE;
 
@@ -169,17 +169,19 @@ async function autoRebuyCO2(bunkerState = null, autopilotPaused, broadcastToUser
     logger.info(`[Auto-Rebuy CO2] Purchased ${amountToBuy}t @ $${prices.co2}/t (New total: ${result.newTotal.toFixed(1)}t)`);
 
     // Log to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.BUNKER,
       'Auto-CO2',
-      'SUCCESS',
-      `${amountToBuy}t @ $${prices.co2}/t | -$${result.cost.toLocaleString()}`,
+      `${amountToBuy}t @ ${formatCurrency(prices.co2)}/t | -${formatCurrency(result.cost)}`,
       {
         amount: amountToBuy,
         price: prices.co2,
         totalCost: result.cost,
         newTotal: result.newTotal
-      }
+      },
+      'SUCCESS',
+      SOURCES.AUTOPILOT
     );
 
     // Update all header data and badges
@@ -194,12 +196,14 @@ async function autoRebuyCO2(bunkerState = null, autopilotPaused, broadcastToUser
       ? { error: error.message }
       : { error: error.message, stack: error.stack };
 
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.BUNKER,
       'Auto-CO2',
-      'ERROR',
       `Purchase failed: ${error.message}`,
-      details
+      details,
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }

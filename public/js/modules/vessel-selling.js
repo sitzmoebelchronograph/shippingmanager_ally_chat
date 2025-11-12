@@ -16,11 +16,52 @@ let currentSellVessels = [];
 let selectedSellVessels = [];
 let currentSellFilter = 'container';
 
+const SELL_CART_CACHE_KEY = 'vessel_sell_cart';
+
+/**
+ * Load sell cart from localStorage
+ */
+function loadSellCartFromCache() {
+  try {
+    const cached = localStorage.getItem(SELL_CART_CACHE_KEY);
+    if (cached) {
+      selectedSellVessels = JSON.parse(cached);
+      updateBulkSellButton();
+      console.log('[Vessel Selling] Loaded', selectedSellVessels.length, 'items from cache');
+    }
+  } catch (error) {
+    console.error('[Vessel Selling] Failed to load cart from cache:', error);
+  }
+}
+
+/**
+ * Save sell cart to localStorage
+ */
+function saveSellCartToCache() {
+  try {
+    localStorage.setItem(SELL_CART_CACHE_KEY, JSON.stringify(selectedSellVessels));
+  } catch (error) {
+    console.error('[Vessel Selling] Failed to save cart to cache:', error);
+  }
+}
+
+/**
+ * Clear sell cart cache
+ */
+function clearSellCartCache() {
+  try {
+    localStorage.removeItem(SELL_CART_CACHE_KEY);
+  } catch (error) {
+    console.error('[Vessel Selling] Failed to clear cart cache:', error);
+  }
+}
+
 /**
  * Opens the sell vessels overlay and loads user vessels
  */
 export async function openSellVesselsOverlay() {
   document.getElementById('sellVesselsOverlay').classList.remove('hidden');
+  loadSellCartFromCache();
   await loadUserVesselsForSale();
 }
 
@@ -180,7 +221,7 @@ async function displaySellVessels() {
     const selectedItem = selectedSellVessels.find(v => v.modelKey === modelKey);
     const isSelected = !!selectedItem;
 
-    const imageUrl = `https://shippingmanager.cc/images/acquirevessels/${model.type}`;
+    const imageUrl = `/api/vessel-image/${model.type}`;
     const capacityDisplay = getCapacityDisplay(model);
     const co2Class = getCO2EfficiencyClass(model.co2_factor);
     const fuelClass = getFuelEfficiencyClass(model.fuel_factor);
@@ -244,7 +285,21 @@ async function displaySellVessels() {
 
               return sorted.map((v, idx) => {
                 const canSelect = v.status !== 'route' && v.status !== 'enroute';
-                const statusDisplay = v.status === 'port' ? '✓ Harbor' : v.status === 'pending' ? '⏳ Delivery' : v.status === 'anchor' ? '⚓ Anchored' : v.status === 'route' || v.status === 'enroute' ? '🚢 En Route' : v.status;
+
+                // Status: emoji only, text as mouseover
+                let statusDisplay;
+                if (v.status === 'port') {
+                  statusDisplay = '<span title="Harbor" style="color: #10b981;">⚓</span>';
+                } else if (v.status === 'anchor') {
+                  statusDisplay = '<span title="Anchored">⚓</span>';
+                } else if (v.status === 'route' || v.status === 'enroute') {
+                  statusDisplay = '<span title="En Route">🚢</span>';
+                } else if (v.status === 'pending') {
+                  statusDisplay = '<span title="Delivery">⏳</span>';
+                } else {
+                  statusDisplay = v.status;
+                }
+
                 return `
                   <div class="sell-vessel-list-item">
                     <div class="sell-vessel-item-left">
@@ -411,6 +466,11 @@ async function displaySellVessels() {
 
   feed.innerHTML = '';
   feed.appendChild(container);
+
+  // Restore checkboxes for cached items
+  selectedSellVessels.forEach(item => {
+    updateSelectButtonState(item.modelKey, item.quantity);
+  });
 }
 
 /**
@@ -481,6 +541,7 @@ function toggleVesselSelection(modelKey, quantity, modelName, vesselIds, sellPri
 
   // Don't re-render - just update the select button text
   updateSelectButtonState(modelKey, quantity);
+  saveSellCartToCache();
 }
 
 /**
@@ -513,6 +574,7 @@ function addVesselsToCart(modelKey, quantity, modelName, vesselIds, sellPrice, o
 
   // Update the select button state
   updateSelectButtonState(modelKey, selectedSellVessels[index > -1 ? index : selectedSellVessels.length - 1].quantity);
+  saveSellCartToCache();
 }
 
 /**
@@ -545,6 +607,7 @@ function updateVesselSelectionInCart(modelKey, quantity, modelName, vesselIds, s
 
   // Update the select button state
   updateSelectButtonState(modelKey, quantity);
+  saveSellCartToCache();
 }
 
 /**
@@ -572,6 +635,7 @@ function removeVesselSelectionFromCart(modelKey) {
 
   // Update the select button state
   updateSelectButtonState(modelKey, 0);
+  saveSellCartToCache();
 }
 
 /**
@@ -582,17 +646,24 @@ function updateSelectButtonState(modelKey, quantity) {
   cards.forEach(card => {
     const selectBtn = card.querySelector(`.vessel-select-btn[data-model-key="${modelKey}"]`);
     if (selectBtn) {
-      const isSelected = selectedSellVessels.find(v => v.modelKey === modelKey);
-      if (isSelected) {
+      const cartItem = selectedSellVessels.find(v => v.modelKey === modelKey);
+      if (cartItem) {
         selectBtn.classList.add('selected');
+        card.classList.add('selected');
       } else {
         selectBtn.classList.remove('selected');
+        card.classList.remove('selected');
       }
 
-      // Also update all checkboxes for this model
+      // Update checkboxes - only check the ones in vesselIds
       const checkboxes = card.querySelectorAll(`.vessel-checkbox[data-model-key="${modelKey}"]`);
       checkboxes.forEach(checkbox => {
-        checkbox.checked = !!isSelected;
+        const vesselId = parseInt(checkbox.dataset.vesselId);
+        if (cartItem && cartItem.vesselIds.includes(vesselId)) {
+          checkbox.checked = true;
+        } else {
+          checkbox.checked = false;
+        }
       });
     }
   });
@@ -876,9 +947,30 @@ export async function bulkSellVessels() {
 
     if (!response.ok) throw new Error('Failed to sell vessels');
 
-    showSideNotification(`✅ Bulk sold ${totalVessels} vessels for $${formatNumber(totalPrice)}`, 'success');
+    // Send summary notification to backend (broadcasts to ALL clients with detailed list)
+    try {
+      const vesselsForSummary = selectedSellVessels.map(sel => ({
+        name: sel.modelName,
+        quantity: sel.quantity,
+        price: sel.sellPrice,
+        totalPrice: sel.sellPrice * sel.quantity
+      }));
+
+      await fetch(window.apiUrl('/api/vessel/broadcast-sale-summary'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vessels: vesselsForSummary,
+          totalPrice: totalPrice,
+          totalVessels: totalVessels
+        })
+      });
+    } catch (error) {
+      console.error('Error broadcasting sale summary:', error);
+    }
 
     selectedSellVessels = [];
+    clearSellCartCache();
     updateBulkSellButton();
     await loadUserVesselsForSale();
 

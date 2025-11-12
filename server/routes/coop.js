@@ -264,6 +264,32 @@ router.post('/coop/send-max', async (req, res) => {
 
     const departed = result.data?.vessels_departed;
 
+    // Log successful COOP send
+    if (userId && departed > 0) {
+      try {
+        const { auditLog, CATEGORIES, SOURCES } = require('../utils/audit-logger');
+
+        await auditLog(
+          userId,
+          CATEGORIES.COOP,
+          'Manual COOP Send',
+          `Sent ${departed} vessel(s) to ${targetMember.company_name}`,
+          {
+            target_user_id: user_id,
+            target_company_name: targetMember.company_name,
+            vessels_sent: departed,
+            vessels_requested: maxToSend,
+            partial: departed < maxToSend
+          },
+          'SUCCESS',
+          SOURCES.MANUAL
+        );
+      } catch (auditError) {
+        logger.error('[COOP] Audit logging failed:', auditError.message);
+        // Continue anyway - COOP send was successful
+      }
+    }
+
     // Broadcast coop send complete to unlock buttons
     if (userId) {
       broadcastToUser(userId, 'coop_send_complete', { departed });

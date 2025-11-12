@@ -491,6 +491,24 @@ router.post('/vessel/:vesselId/history/export', async (req, res) => {
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.send(content);
     } else if (format === 'json') {
+      // Add revenue_per_nm to each trip in history
+      const enrichedHistory = history.map(trip => {
+        const hasLoadedCargo = (
+          (trip.cargo?.dry > 0 || trip.cargo?.refrigerated > 0) ||
+          (trip.cargo?.fuel > 0 || trip.cargo?.crude_oil > 0)
+        );
+
+        let revenuePerNm = null;
+        if (hasLoadedCargo && trip.route_income && trip.total_distance && trip.total_distance > 0) {
+          revenuePerNm = parseFloat((trip.route_income / trip.total_distance).toFixed(2));
+        }
+
+        return {
+          ...trip,
+          revenue_per_nm: revenuePerNm
+        };
+      });
+
       const content = JSON.stringify({
         vessel: {
           id: vesselId,
@@ -498,8 +516,8 @@ router.post('/vessel/:vesselId/history/export', async (req, res) => {
           type: vessel.type_name
         },
         exported: new Date().toISOString(),
-        total_trips: history.length,
-        history: history
+        total_trips: enrichedHistory.length,
+        history: enrichedHistory
       }, null, 2);
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -536,12 +554,15 @@ function formatHistoryAsTXT(vessel, history) {
     txt += `Duration: ${trip.duration}\n\n`;
 
     txt += `Cargo:\n`;
+    let hasLoadedCargo = false;
     if (trip.cargo?.dry !== undefined) {
       txt += `  Dry: ${trip.cargo.dry} TEU\n`;
       txt += `  Refrigerated: ${trip.cargo.refrigerated} TEU\n`;
+      hasLoadedCargo = (trip.cargo.dry > 0 || trip.cargo.refrigerated > 0);
     } else if (trip.cargo?.fuel !== undefined) {
       txt += `  Fuel: ${trip.cargo.fuel} tons\n`;
       txt += `  Crude Oil: ${trip.cargo.crude_oil} tons\n`;
+      hasLoadedCargo = (trip.cargo.fuel > 0 || trip.cargo.crude_oil > 0);
     }
     txt += `\n`;
 
@@ -549,6 +570,13 @@ function formatHistoryAsTXT(vessel, history) {
     txt += `  Income: $${trip.route_income?.toLocaleString() || '0'}\n`;
     txt += `  Fuel Used: ${trip.fuel_used} tons\n`;
     txt += `  Wear: ${trip.wear}%\n`;
+
+    // Calculate revenue per nautical mile if cargo was loaded
+    if (hasLoadedCargo && trip.route_income && trip.total_distance && trip.total_distance > 0) {
+      const revenuePerNm = (trip.route_income / trip.total_distance).toFixed(2);
+      txt += `  Revenue per NM: $${parseFloat(revenuePerNm).toLocaleString()}/nm\n`;
+    }
+
     txt += `\n\n`;
   });
 
@@ -575,7 +603,7 @@ function escapeCSVFormula(value) {
 }
 
 function formatHistoryAsCSV(history) {
-  let csv = 'Date,Origin,Destination,Distance,Duration,Cargo_Dry,Cargo_Ref,Cargo_Fuel,Cargo_Crude,Income,Fuel_Used,Wear\n';
+  let csv = 'Date,Origin,Destination,Distance,Duration,Cargo_Dry,Cargo_Ref,Cargo_Fuel,Cargo_Crude,Income,Fuel_Used,Wear,Revenue_Per_NM\n';
 
   history.forEach(trip => {
     const date = trip.created_at || '';
@@ -591,8 +619,18 @@ function formatHistoryAsCSV(history) {
     const fuel = trip.fuel_used || 0;
     const wear = trip.wear || 0;
 
+    // Calculate revenue per nautical mile if cargo was loaded
+    let revenuePerNm = '';
+    const hasLoadedCargo = (
+      (trip.cargo?.dry > 0 || trip.cargo?.refrigerated > 0) ||
+      (trip.cargo?.fuel > 0 || trip.cargo?.crude_oil > 0)
+    );
+    if (hasLoadedCargo && income > 0 && distance > 0) {
+      revenuePerNm = (income / distance).toFixed(2);
+    }
+
     // Escape string fields to prevent CSV formula injection
-    csv += `"${escapeCSVFormula(date)}","${escapeCSVFormula(origin)}","${escapeCSVFormula(destination)}",${distance},"${escapeCSVFormula(duration)}",${cargoDry},${cargoRef},${cargoFuel},${cargoCrude},${income},${fuel},${wear}\n`;
+    csv += `"${escapeCSVFormula(date)}","${escapeCSVFormula(origin)}","${escapeCSVFormula(destination)}",${distance},"${escapeCSVFormula(duration)}",${cargoDry},${cargoRef},${cargoFuel},${cargoCrude},${income},${fuel},${wear},${revenuePerNm}\n`;
   });
 
   return csv;

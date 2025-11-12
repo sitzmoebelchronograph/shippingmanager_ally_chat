@@ -12,7 +12,7 @@ const state = require('../state');
 const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
 const config = require('../config');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const DEBUG_MODE = config.DEBUG_MODE;
 
@@ -118,16 +118,18 @@ async function autoCampaignRenewal(campaignData = null, autopilotPaused, broadca
       const totalCost = renewed.reduce((sum, r) => sum + r.price, 0);
 
       // Log to autopilot logbook
-      await logAutopilotAction(
+      await auditLog(
         userId,
+        CATEGORIES.MARKETING,
         'Auto-Campaign',
-        'SUCCESS',
-        `${renewed.length} campaign${renewed.length > 1 ? 's' : ''} | -$${totalCost.toLocaleString()}`,
+        `${renewed.length} campaign${renewed.length > 1 ? 's' : ''} | -${formatCurrency(totalCost)}`,
         {
           campaignCount: renewed.length,
           totalCost,
           renewedCampaigns: renewed
-        }
+        },
+        'SUCCESS',
+        SOURCES.AUTOPILOT
       );
 
       // Update all data to refresh campaign badge and cash/points
@@ -138,15 +140,17 @@ async function autoCampaignRenewal(campaignData = null, autopilotPaused, broadca
     logger.error('[Auto-Campaign] Error:', error.message);
 
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.MARKETING,
       'Auto-Campaign',
-      'ERROR',
       `Campaign renewal failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }

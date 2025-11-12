@@ -13,7 +13,7 @@ const { getUserId, apiCall } = require('../utils/api');
 const config = require('../config');
 const path = require('path');
 const fs = require('fs');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const DEBUG_MODE = config.DEBUG_MODE;
 
@@ -379,11 +379,11 @@ async function processHijackingCase(userId, caseId, vesselName, threshold, offer
         }
 
         // Log to autopilot logbook
-        await logAutopilotAction(
+        await auditLog(
           userId,
+          CATEGORIES.HIJACKING,
           'Auto-Blackbeard',
-          'SUCCESS',
-          `${vesselName} | $${requestedAmount.toLocaleString()}`,
+          `${vesselName} | ${formatCurrency(requestedAmount)}`,
           {
             caseId,
             vesselName,
@@ -392,7 +392,9 @@ async function processHijackingCase(userId, caseId, vesselName, threshold, offer
             negotiationRounds: negotiationRound,
             verified: paymentResult.verified,
             verificationStatus: paymentResult.verification_status
-          }
+          },
+          'SUCCESS',
+          SOURCES.AUTOPILOT
         );
       } else {
         logger.debug(`[Auto-Negotiate Hijacking] Case ${caseId}: Failed to accept ransom`);
@@ -565,17 +567,19 @@ async function autoNegotiateHijacking(autopilotPaused, broadcastToUser, tryUpdat
         logger.error(`[Auto-Negotiate Hijacking] Error processing case ${caseId}:`, error.message);
 
         // Log error to autopilot logbook
-        await logAutopilotAction(
+        await auditLog(
           userId,
+          CATEGORIES.HIJACKING,
           'Auto-Blackbeard',
-          'ERROR',
           `Negotiation failed for ${vesselName}: ${error.message}`,
           {
             caseId,
             vesselName,
             error: error.message,
             stack: error.stack
-          }
+          },
+          'ERROR',
+          SOURCES.AUTOPILOT
         );
 
         if (broadcastToUser) {
@@ -595,15 +599,17 @@ async function autoNegotiateHijacking(autopilotPaused, broadcastToUser, tryUpdat
     logger.error('[Auto-Negotiate Hijacking] Error:', error.message);
 
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.HIJACKING,
       'Auto-Blackbeard',
-      'ERROR',
       `Operation failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }

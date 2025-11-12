@@ -37,6 +37,7 @@ import { lockCoopButtons, unlockCoopButtons } from './coop.js';
 import { showAnchorTimer } from './anchor-purchase.js';
 import { updateCurrentCash, updateCurrentFuel, updateCurrentCO2 } from './bunker-management.js';
 import { refreshVesselsForSale } from './vessel-selling.js';
+import { updateBadge, updateButtonState, updateButtonTooltip } from './badge-manager.js';
 
 /**
  * Converts UTC timestamp string to local timezone string using browser locale.
@@ -231,24 +232,19 @@ export async function loadMessages(chatFeed) {
  */
 function updateAllianceChatBadge(unreadCount) {
   const overlay = document.getElementById('allianceChatOverlay');
-  const badge = document.getElementById('allianceChatBadge');
 
-  if (!badge || !overlay) return;
+  if (!overlay) return;
 
   // If chat is open, hide badge (mark-read will be called on close)
   const isChatOpen = !overlay.classList.contains('hidden');
   if (isChatOpen) {
-    badge.classList.add('hidden');
+    updateBadge('allianceChatBadge', 0, false, 'RED');
     return;
   }
 
   // Chat is closed - use backend's unread count
-  if (unreadCount > 0) {
-    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
-    badge.classList.remove('hidden');
-  } else {
-    badge.classList.add('hidden');
-  }
+  const displayCount = unreadCount > 99 ? 99 : unreadCount;
+  updateBadge('allianceChatBadge', displayCount, unreadCount > 0, 'RED');
 }
 
 /**
@@ -2063,67 +2059,29 @@ function handleVesselCountUpdate(data) {
     console.log(`[Autopilot] Vessel count update: Ready=${readyToDepart}, Anchor=${atAnchor}, Pending=${pending}`);
   }
 
-  // Update ready to depart badge
-  const vesselCountBadge = document.getElementById('vesselCount');
-  if (vesselCountBadge) {
-    vesselCountBadge.textContent = readyToDepart;
-    if (readyToDepart > 0) {
-      vesselCountBadge.classList.remove('hidden');
-    } else {
-      vesselCountBadge.classList.add('hidden');
-    }
-  }
+  // Update ready to depart badge using badge-manager
+  updateBadge('vesselCount', readyToDepart, readyToDepart > 0, 'BLUE');
 
-  // Update at anchor badge
-  const anchorCountBadge = document.getElementById('anchorCount');
-  if (anchorCountBadge) {
-    anchorCountBadge.textContent = atAnchor;
-    if (atAnchor > 0) {
-      anchorCountBadge.classList.remove('hidden');
-    } else {
-      anchorCountBadge.classList.add('hidden');
-    }
-  }
+  // Update at anchor badge using badge-manager
+  updateBadge('anchorCount', atAnchor, atAnchor > 0, 'RED');
 
-  // Update pending vessels badge
-  const pendingBadge = document.getElementById('pendingVesselsBadge');
-  if (pendingBadge) {
-    pendingBadge.textContent = pending;
-    if (pending > 0) {
-      pendingBadge.classList.remove('hidden');
-    } else {
-      pendingBadge.classList.add('hidden');
-    }
+  // Update pending vessels badge using badge-manager
+  updateBadge('pendingVesselsBadge', pending, pending > 0, 'ORANGE');
 
-    // Update buyVesselsBtn tooltip to show pending count
-    const buyVesselsBtn = document.getElementById('buyVesselsBtn');
-    if (buyVesselsBtn) {
-      buyVesselsBtn.title = pending > 0 ? `Vessels in delivery: ${pending}` : 'Buy vessels';
-    }
-  }
+  // Update tooltips
+  const anchorTooltip = atAnchor > 0
+    ? `${atAnchor} vessel${atAnchor === 1 ? '' : 's'} at anchor - Click to purchase anchor points`
+    : 'Purchase anchor points';
+  updateButtonTooltip('anchor', anchorTooltip);
+  updateButtonTooltip('buyVessels', pending > 0 ? `Vessels in delivery: ${pending}` : 'Buy vessels');
 
-  // Update depart button state and tooltip
-  const departBtn = document.getElementById('departAllBtn');
-  if (departBtn) {
-    if (readyToDepart > 0) {
-      departBtn.disabled = false;
-      departBtn.title = `Depart all ${readyToDepart} vessel${readyToDepart === 1 ? '' : 's'} from harbor`;
-    } else {
-      departBtn.disabled = true;
-      departBtn.title = 'No vessels ready to depart';
-    }
-  }
-
-  // Anchor button - always enabled for purchasing anchor points
-  const anchorBtn = document.getElementById('anchorBtn');
-  if (anchorBtn) {
-    // anchorBtn.disabled = false;  // Always enabled
-    if (atAnchor > 0) {
-      anchorBtn.title = `${atAnchor} vessel${atAnchor === 1 ? '' : 's'} at anchor - Click to purchase anchor points`;
-    } else {
-      anchorBtn.title = 'Purchase anchor points';
-    }
-  }
+  // Update depart button state and tooltip AFTER badges are updated
+  const departDisabled = readyToDepart === 0;
+  updateButtonState('departAll', departDisabled);
+  const departTooltip = readyToDepart > 0
+    ? `Depart all ${readyToDepart} vessel${readyToDepart === 1 ? '' : 's'} from harbor`
+    : 'No vessels ready to depart';
+  updateButtonTooltip('departAll', departTooltip);
 
   // Harbor Map refresh is now handled by harbor_map_refresh_required event
 
@@ -2185,33 +2143,29 @@ function handleRepairCountUpdate(data) {
     console.log(`[Autopilot] Repair count update: ${count} vessel${count === 1 ? '' : 's'} need repair`);
   }
 
-  const repairBadge = document.getElementById('repairCount');
-  if (repairBadge) {
-    repairBadge.textContent = count;
-    // Remove any color classes that might have been accidentally added
-    repairBadge.classList.remove('badge-green-bg', 'badge-orange-bg', 'badge-red-bg');
-    if (count > 0) {
-      repairBadge.classList.remove('hidden');
-    } else {
-      repairBadge.classList.add('hidden');
-    }
-  }
+  // Update repair badge using badge-manager
+  updateBadge('repairCount', count, count > 0, 'RED');
 
-  // Update repair button state
-  const repairBtn = document.getElementById('repairAllBtn');
-  if (repairBtn) {
-    if (count > 0) {
-      repairBtn.disabled = false;
-      repairBtn.title = `Repair ${count} vessel${count === 1 ? '' : 's'} with high wear`;
-    } else {
-      repairBtn.disabled = true;
-      repairBtn.title = 'No vessels need repair';
-    }
+  // Update repair button state (check both repair and drydock counts)
+  const drydockBadge = document.querySelector('.map-icon-item[data-action="repairAll"] .map-icon-badge-bottom-left');
+  const drydockCount = drydockBadge ? (parseInt(drydockBadge.textContent) || 0) : 0;
+
+  const hasWork = count > 0 || drydockCount > 0;
+  updateButtonState('repairAll', !hasWork);
+
+  if (count > 0 && drydockCount > 0) {
+    updateButtonTooltip('repairAll', `Repair ${count} vessel${count === 1 ? '' : 's'} or drydock ${drydockCount} vessel${drydockCount === 1 ? '' : 's'}`);
+  } else if (count > 0) {
+    updateButtonTooltip('repairAll', `Repair ${count} vessel${count === 1 ? '' : 's'}`);
+  } else if (drydockCount > 0) {
+    updateButtonTooltip('repairAll', `Drydock ${drydockCount} vessel${drydockCount === 1 ? '' : 's'}`);
+  } else {
+    updateButtonTooltip('repairAll', 'No vessels need repair or drydock');
   }
 
   // Cache value for next page load
   if (window.saveBadgeCache) {
-    window.saveBadgeCache({ repair: count });
+    window.saveBadgeCache({ repair: { count } });
   }
 }
 
@@ -2226,19 +2180,29 @@ function handleDrydockCountUpdate(data) {
     console.log(`[Autopilot] Drydock count update: ${count} vessel${count === 1 ? '' : 's'} need drydock`);
   }
 
-  const drydockBadge = document.getElementById('drydockCount');
-  if (drydockBadge) {
-    drydockBadge.textContent = count;
-    if (count > 0) {
-      drydockBadge.classList.remove('hidden');
-    } else {
-      drydockBadge.classList.add('hidden');
-    }
+  // Update drydock badge using badge-manager
+  updateBadge('drydockCount', count, count > 0, 'ORANGE');
+
+  // Update repair button state (check both repair and drydock counts)
+  const repairBadge = document.querySelector('.map-icon-item[data-action="repairAll"] .map-icon-badge');
+  const repairCount = repairBadge ? (parseInt(repairBadge.textContent) || 0) : 0;
+
+  const hasWork = repairCount > 0 || count > 0;
+  updateButtonState('repairAll', !hasWork);
+
+  if (repairCount > 0 && count > 0) {
+    updateButtonTooltip('repairAll', `Repair ${repairCount} vessel${repairCount === 1 ? '' : 's'} or drydock ${count} vessel${count === 1 ? '' : 's'}`);
+  } else if (repairCount > 0) {
+    updateButtonTooltip('repairAll', `Repair ${repairCount} vessel${repairCount === 1 ? '' : 's'} with high wear`);
+  } else if (count > 0) {
+    updateButtonTooltip('repairAll', `Drydock ${count} vessel${count === 1 ? '' : 's'}`);
+  } else {
+    updateButtonTooltip('repairAll', 'No vessels need repair or drydock');
   }
 
   // Cache value for next page load
   if (window.saveBadgeCache) {
-    window.saveBadgeCache({ drydock: count });
+    window.saveBadgeCache({ drydock: { count } });
   }
 }
 
@@ -2256,16 +2220,8 @@ function handleCampaignStatusUpdate(data) {
     console.log(`[Autopilot] Campaign update: ${activeCount} active campaign${activeCount === 1 ? '' : 's'}`);
   }
 
-  const campaignBadge = document.getElementById('campaignsCount');
-  if (campaignBadge) {
-    campaignBadge.textContent = activeCount;
-    // Only show badge if < 3 campaigns (0, 1, or 2)
-    if (activeCount < 3) {
-      campaignBadge.classList.remove('hidden');
-    } else {
-      campaignBadge.classList.add('hidden');
-    }
-  }
+  // Update campaigns badge using badge-manager (only show if < 3 campaigns)
+  updateBadge('campaignsCount', activeCount, activeCount < 3, 'RED');
 
   // Update header display
   const campaignsHeaderDisplay = document.getElementById('campaignsHeaderDisplay');

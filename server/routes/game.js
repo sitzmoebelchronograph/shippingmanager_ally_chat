@@ -40,6 +40,7 @@ const path = require('path');
 const os = require('os');
 const logger = require('../utils/logger');
 const autopilot = require('../autopilot');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const router = express.Router();
 
@@ -197,6 +198,32 @@ router.post('/bunker/purchase-fuel', express.json(), async (req, res) => {
 
       logger.info(`[Manual Fuel Purchase] User bought ${amount}t @ $${actualPricePerTon}/t = $${actualCost.toLocaleString('en-US')} (Cash before: $${cashBefore.toLocaleString('en-US')} Cash after: $${cashAfter.toLocaleString('en-US')})`);
 
+      // AUDIT LOG: Manual fuel purchase
+      const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+
+      // Validate data - FAIL LOUD if missing
+      if (!data.user || data.user.fuel === undefined || data.user.fuel === null) {
+        throw new Error('API response missing user.fuel data');
+      }
+
+      await auditLog(
+        userId,
+        CATEGORIES.BUNKER,
+        'Manual Fuel Purchase',
+        `+${amount}t @ ${formatCurrency(actualPricePerTon)}/t = ${formatCurrency(actualCost)}`,
+        {
+          amount_tons: amount,
+          price_per_ton: actualPricePerTon,
+          total_cost: actualCost,
+          balance_before: cashBefore,
+          balance_after: cashAfter,
+          inventory_before_kg: bunkerBefore.fuel,
+          inventory_after_kg: data.user.fuel
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+
       broadcastToUser(userId, 'user_action_notification', {
         type: 'success',
         message: `
@@ -297,6 +324,33 @@ router.post('/bunker/purchase-co2', express.json(), async (req, res) => {
 
       logger.info(`[Manual CO2 Purchase] User bought ${amount}t @ $${actualPricePerTon}/t = $${actualCost.toLocaleString('en-US')} (Cash before: $${cashBefore.toLocaleString('en-US')} Cash after: $${cashAfter.toLocaleString('en-US')})`);
 
+      // AUDIT LOG: Manual CO2 purchase
+      const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+
+      // Validate data - FAIL LOUD if missing
+      const co2After = data.user.co2 || data.user.co2_certificate;
+      if (co2After === undefined || co2After === null) {
+        throw new Error('API response missing user.co2/co2_certificate data');
+      }
+
+      await auditLog(
+        userId,
+        CATEGORIES.BUNKER,
+        'Manual CO2 Purchase',
+        `+${amount}t @ ${formatCurrency(actualPricePerTon)}/t = ${formatCurrency(actualCost)}`,
+        {
+          amount_tons: amount,
+          price_per_ton: actualPricePerTon,
+          total_cost: actualCost,
+          balance_before: cashBefore,
+          balance_after: cashAfter,
+          inventory_before_kg: bunkerBefore.co2,
+          inventory_after_kg: co2After
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+
       broadcastToUser(userId, 'user_action_notification', {
         type: 'success',
         message: `
@@ -383,6 +437,45 @@ router.post('/route/depart', async (req, res) => {
     const { broadcastToUser, broadcastHarborMapRefresh } = require('../websocket');
     const result = await autopilot.departVessels(userId, vesselIds, broadcastToUser, autopilot.autoRebuyAll, autopilot.tryUpdateAllData);
 
+    // LOGBOOK: Manual vessel departure (same format as Auto-Depart)
+    if (result && result.success && result.departedCount > 0) {
+      // Log success
+      await auditLog(
+        userId,
+        CATEGORIES.VESSEL,
+        'Manual Depart',
+        `${result.departedCount} vessels | +${formatCurrency(result.totalRevenue)}`,
+        {
+          vesselCount: result.departedCount,
+          totalRevenue: result.totalRevenue,
+          totalFuelUsed: result.totalFuelUsed,
+          totalCO2Used: result.totalCO2Used,
+          totalHarborFees: result.totalHarborFees,
+          departedVessels: result.departedVessels
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+
+      // Log warnings if any vessels had excessive harbor fees
+      if (result.highFeeCount > 0) {
+        const totalHarborFees = result.highFeeVessels.reduce((sum, v) => sum + v.harborFee, 0);
+        await auditLog(
+          userId,
+          CATEGORIES.VESSEL,
+          'Manual Depart',
+          `${result.highFeeCount} vessel${result.highFeeCount > 1 ? 's' : ''} with excessive harbor fees | ${formatCurrency(totalHarborFees)} fees`,
+          {
+            vesselCount: result.highFeeCount,
+            totalHarborFees: totalHarborFees,
+            highFeeVessels: result.highFeeVessels
+          },
+          'WARNING',
+          SOURCES.MANUAL
+        );
+      }
+    }
+
     // Trigger Harbor Map refresh (vessels departed)
     if (broadcastHarborMapRefresh) {
       broadcastHarborMapRefresh(userId, 'vessels_departed', {
@@ -467,11 +560,29 @@ router.post('/maintenance/get-drydock-status', express.json(), async (req, res) 
 
   try {
     const data = await apiCall('/maintenance/get', 'POST', {
-      vessel_ids,
-      speed,
-      maintenance_type
+      vessel_ids
     });
-    res.json(data);
+
+    // Parse maintenance data and extract correct costs based on type
+    const vessels = data.data.vessels.map(v => {
+      const maintenanceType = maintenance_type === 'major' ? 'drydock_major' : 'drydock_minor';
+      const maintenanceInfo = v.maintenance_data?.find(m => m.type === maintenanceType);
+
+      return {
+        id: v.id,
+        cost: maintenanceInfo?.discounted_price || maintenanceInfo?.price || 0,
+        duration: maintenanceInfo?.duration || 0,
+        nearest_dry_dock: v.nearest_dry_dock
+      };
+    });
+
+    const totalCost = vessels.reduce((sum, v) => sum + v.cost, 0);
+
+    res.json({
+      vessels,
+      totalCost,
+      cash: data.user.cash
+    });
   } catch (error) {
     logger.error('Error getting drydock status:', error);
     res.status(500).json({ error: 'Failed to get drydock status' });
@@ -503,12 +614,48 @@ router.post('/maintenance/bulk-drydock', express.json(), async (req, res) => {
 
     const userId = getUserId();
     if (userId && data.data?.success) {
-      logger.info(`[Manual Drydock] User sent ${JSON.parse(vessel_ids).length} vessel(s) to drydock (${maintenance_type}, ${speed} speed)`);
+      const vesselCount = JSON.parse(vessel_ids).length;
+      logger.info(`[Manual Drydock] User sent ${vesselCount} vessel(s) to drydock (${maintenance_type}, ${speed} speed)`);
+
+      // AUDIT LOG: Manual bulk drydock
+      const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+
+      const vessels = data.data.vessels || [];
+      let totalCost = 0;
+
+      // Calculate total cost if vessel data is available
+      if (vessels.length > 0) {
+        totalCost = vessels.reduce((sum, v) => sum + (v.cost || 0), 0);
+      }
+
+      // Log with available data (even if vessels array is empty)
+      await auditLog(
+        userId,
+        CATEGORIES.VESSEL,
+        'Manual Bulk Drydock',
+        vessels.length > 0
+          ? `Sent ${vessels.length} vessel(s) to ${maintenance_type} drydock (${speed} speed) for ${formatCurrency(totalCost)}`
+          : `Sent ${vesselCount} vessel(s) to ${maintenance_type} drydock (${speed} speed)`,
+        {
+          vessel_count: vessels.length > 0 ? vessels.length : vesselCount,
+          total_cost: totalCost > 0 ? totalCost : undefined,
+          maintenance_type: maintenance_type,
+          speed: speed,
+          vessels: vessels.length > 0 ? vessels.map(v => ({
+            id: v.id,
+            cost: v.cost,
+            duration: v.duration,
+            nearest_dry_dock: v.nearest_dry_dock
+          })) : undefined
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
 
       // Broadcast success notification
       broadcastToUser(userId, 'user_action_notification', {
         type: 'success',
-        message: `🔧 <strong>Drydock Scheduled!</strong><br><br>Sent ${JSON.parse(vessel_ids).length} vessel(s) to drydock`
+        message: `🔧 <strong>Drydock Scheduled!</strong><br><br>Sent ${vesselCount} vessel(s) to drydock`
       });
 
       // Broadcast bunker update (cash/fuel/co2 updated)
@@ -535,6 +682,30 @@ router.post('/maintenance/bulk-drydock', express.json(), async (req, res) => {
         type: 'error',
         message: `🔧 <strong>Drydock Failed</strong><br><br>${safeErrorMessage}`
       });
+
+      // AUDIT LOG: Manual bulk drydock failed
+      try {
+        const { auditLog, CATEGORIES, SOURCES } = require('../utils/audit-logger');
+        const vesselCount = vessel_ids ? JSON.parse(vessel_ids).length : 0;
+
+        await auditLog(
+          userId,
+          CATEGORIES.VESSEL,
+          'Manual Bulk Drydock',
+          `Failed to send ${vesselCount} vessel(s) to ${maintenance_type || 'unknown'} drydock: ${error.message}`,
+          {
+            vessel_count: vesselCount,
+            maintenance_type: maintenance_type || 'unknown',
+            speed: speed || 'unknown',
+            error: error.message,
+            stack: error.stack
+          },
+          'ERROR',
+          SOURCES.MANUAL
+        );
+      } catch (auditError) {
+        logger.error('[Drydock] Audit logging failed:', auditError.message);
+      }
     }
 
     res.status(500).json({ error: 'Failed to execute drydock' });
@@ -575,9 +746,84 @@ router.post('/marketing/activate-campaign', express.json(), async (req, res) => 
 
   try {
     const data = await apiCall('/marketing-campaign/activate-marketing-campaign', 'POST', { campaign_id });
+
+    // Log campaign activation (regardless of data.success value)
+    const userId = getUserId();
+    if (userId) {
+      try {
+        const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+
+        // Fetch campaign details to get name and price
+        const campaigns = await gameapi.fetchCampaigns();
+
+        // Search in both available and active campaigns (campaign might have moved to active after activation)
+        let activatedCampaign = campaigns?.available?.find(c => c.id === campaign_id);
+        if (!activatedCampaign) {
+          activatedCampaign = campaigns?.active?.find(c => c.id === campaign_id);
+        }
+
+        if (activatedCampaign) {
+          await auditLog(
+            userId,
+            CATEGORIES.MARKETING,
+            'Campaign Activation',
+            `${activatedCampaign.name} (${activatedCampaign.option_name}) | ${formatCurrency(activatedCampaign.price)}`,
+            {
+              campaign_id,
+              campaign_name: activatedCampaign.name,
+              campaign_type: activatedCampaign.option_name,
+              price: activatedCampaign.price,
+              duration: activatedCampaign.duration
+            },
+            'SUCCESS',
+            SOURCES.MANUAL
+          );
+        } else {
+          // Campaign not found in available or active - log with minimal info
+          logger.warn(`[Marketing] Campaign ${campaign_id} not found in campaigns list after activation`);
+          await auditLog(
+            userId,
+            CATEGORIES.MARKETING,
+            'Campaign Activation',
+            `Campaign ID ${campaign_id} activated`,
+            {
+              campaign_id
+            },
+            'SUCCESS',
+            SOURCES.MANUAL
+          );
+        }
+      } catch (auditError) {
+        logger.error('[Marketing] Audit logging failed:', auditError.message);
+      }
+    }
+
     res.json(data);
   } catch (error) {
     logger.error('Error activating campaign:', error);
+
+    // Log failed activation attempt
+    const userId = getUserId();
+    if (userId) {
+      try {
+        const { auditLog, CATEGORIES, SOURCES } = require('../utils/audit-logger');
+        await auditLog(
+          userId,
+          CATEGORIES.MARKETING,
+          'Campaign Activation',
+          `Failed to activate campaign ${campaign_id}`,
+          {
+            campaign_id,
+            error: error.message
+          },
+          'ERROR',
+          SOURCES.MANUAL
+        );
+      } catch (auditError) {
+        logger.error('[Marketing] Audit logging failed:', auditError.message);
+      }
+    }
+
     res.status(500).json({ error: 'Failed to activate campaign' });
   }
 });
@@ -626,8 +872,32 @@ router.post('/vessel/sell-vessels', express.json(), async (req, res) => {
   }
 
   try {
+    const userId = getUserId();
+
+    // Fetch vessel details BEFORE selling to get prices
+    let vesselDetails = [];
+    const vesselPriceMap = new Map();
+
+    try {
+      const gameData = await apiCallWithRetry('/game/index', 'POST', {});
+      const allVessels = gameData.data?.vessels || [];
+      vesselDetails = allVessels.filter(v => vessel_ids.includes(v.id));
+
+      // Build price map from vessel details (BEFORE selling)
+      vesselDetails.forEach(v => {
+        if (v.sell_price) {
+          vesselPriceMap.set(v.id, v.sell_price);
+        }
+      });
+
+      logger.debug(`[Vessel Sell] Fetched prices for ${vesselPriceMap.size} vessels before selling`);
+    } catch (error) {
+      logger.warn('[Vessel Sell] Failed to fetch vessel details for audit log:', error.message);
+    }
+
     let soldCount = 0;
     const errors = [];
+    let totalSalePrice = 0;
 
     // Sell each vessel individually (API only supports single vessel sales)
     for (const vesselId of vessel_ids) {
@@ -635,6 +905,17 @@ router.post('/vessel/sell-vessels', express.json(), async (req, res) => {
         const data = await apiCall('/vessel/sell-vessel', 'POST', { vessel_id: vesselId });
         if (data.success) {
           soldCount++;
+
+          // Use price from BEFORE selling (from /game/index) or fall back to API response
+          const sellPrice = vesselPriceMap.get(vesselId) || data.vessel?.sell_price || 0;
+
+          if (sellPrice === 0) {
+            logger.error(`[Vessel Sell] Vessel ${vesselId} sold but no price found (neither in /game/index nor in API response)`);
+          } else {
+            logger.debug(`[Vessel Sell] Vessel ${vesselId} sold for $${sellPrice.toLocaleString()}`);
+          }
+
+          totalSalePrice += sellPrice;
         }
       } catch (error) {
         logger.error(`[Vessel Sell] Failed to sell vessel ${vesselId}:`, error.message);
@@ -642,36 +923,25 @@ router.post('/vessel/sell-vessels', express.json(), async (req, res) => {
       }
     }
 
-    const userId = getUserId();
-    if (userId && soldCount > 0) {
-      logger.info(`[Manual Vessel Sell] User sold ${soldCount} vessel(s)`);
+    // Fetch and broadcast updated bunker state (cash increased)
+    try {
+      const gameData = await apiCallWithRetry('/game/index', 'POST', {});
+      if (gameData.data?.user) {
+        const user = gameData.data.user;
 
-      // Broadcast notification to all clients
-      broadcastToUser(userId, 'user_action_notification', {
-        type: 'success',
-        message: `⛴️ <strong>Vessels Sold!</strong><br><br>Successfully sold ${soldCount} vessel${soldCount > 1 ? 's' : ''}`
-      });
+        // API doesn't return capacity fields - use cached values from autopilot
+        const cachedCapacity = autopilot.getCachedCapacity(userId);
 
-      // Fetch and broadcast updated bunker state (cash increased)
-      try {
-        const gameData = await apiCallWithRetry('/game/index', 'POST', {});
-        if (gameData.data?.user) {
-          const user = gameData.data.user;
-
-          // API doesn't return capacity fields - use cached values from autopilot
-          const cachedCapacity = autopilot.getCachedCapacity(userId);
-
-          broadcastToUser(userId, 'bunker_update', {
-            fuel: user.fuel / 1000,
-            co2: (user.co2 || user.co2_certificate) / 1000,
-            cash: user.cash,
-            maxFuel: cachedCapacity.maxFuel,
-            maxCO2: cachedCapacity.maxCO2
-          });
-        }
-      } catch (error) {
-        logger.error('[Vessel Sell] Failed to fetch updated bunker state:', error);
+        broadcastToUser(userId, 'bunker_update', {
+          fuel: user.fuel / 1000,
+          co2: (user.co2 || user.co2_certificate) / 1000,
+          cash: user.cash,
+          maxFuel: cachedCapacity.maxFuel,
+          maxCO2: cachedCapacity.maxCO2
+        });
       }
+    } catch (error) {
+      logger.error('[Vessel Sell] Failed to fetch updated bunker state:', error);
     }
 
     res.json({
@@ -728,6 +998,24 @@ router.post('/vessel/purchase-vessel', express.json(), async (req, res) => {
   }
 
   try {
+    const userId = getUserId();
+
+    // Fetch vessel price BEFORE purchasing
+    let vesselCost = 0;
+    try {
+      const acquirableData = await apiCall('/vessel/get-all-acquirable-vessels', 'POST', {});
+      const vessels = acquirableData.data?.vessels_for_sale || [];
+      const vessel = vessels.find(v => v.id === vessel_id);
+      if (vessel && vessel.price) {
+        vesselCost = vessel.price;
+        logger.debug(`[Vessel Purchase] Fetched price $${vesselCost.toLocaleString()} for vessel ${vessel_id} before purchasing`);
+      } else {
+        logger.warn(`[Vessel Purchase] Could not find vessel ${vessel_id} in acquirable vessels list (${vessels.length} vessels available)`);
+      }
+    } catch (priceError) {
+      logger.warn('[Vessel Purchase] Failed to fetch vessel price before purchase:', priceError.message);
+    }
+
     const data = await apiCall('/vessel/purchase-vessel', 'POST', {
       vessel_id,
       name,
@@ -736,17 +1024,12 @@ router.post('/vessel/purchase-vessel', express.json(), async (req, res) => {
       enhanced_deck_beams: 0
     });
 
-    const userId = getUserId();
+    // Broadcast notification to all clients (unless silent=true)
     if (userId && data.user_vessel && !silent) {
       const vesselName = data.user_vessel.name || name;
       const purchaseCount = count || 1;
-
-      // Escape vessel name to prevent XSS in notifications
       const safeVesselName = validator.escape(vesselName);
 
-      logger.info(`[Manual Vessel Purchase] User bought ${purchaseCount}x ${vesselName}`);
-
-      // Broadcast notification to all clients (unless silent=true)
       broadcastToUser(userId, 'user_action_notification', {
         type: 'success',
         message: `🚢 <strong>Purchase Successful!</strong><br><br>Purchased ${purchaseCount}x ${safeVesselName}`
@@ -816,20 +1099,31 @@ router.post('/vessel/broadcast-purchase-summary', express.json(), async (req, re
   }
 
   try {
-    // Build vessel list HTML
+    // Group vessels by name for display
+    const vesselGroups = vessels.reduce((acc, v) => {
+      if (!acc[v.name]) {
+        acc[v.name] = { name: v.name, quantity: 0, price: v.price, totalPrice: 0 };
+      }
+      acc[v.name].quantity++;
+      acc[v.name].totalPrice += v.price;
+      return acc;
+    }, {});
+    const groupedVessels = Object.values(vesselGroups);
+
+    // Build vessel list HTML with prices
     let vesselListHtml = '';
-    if (vessels.length > 5) {
-      // If more than 5, show scrollable list
+    if (groupedVessels.length > 5) {
+      // If more than 5 types, show scrollable list
       vesselListHtml = '<div style="max-height: 200px; overflow-y: auto; margin: 10px 0; padding-right: 5px;"><ul style="margin: 0; padding-left: 20px; text-align: left;">';
-      vessels.forEach(v => {
-        vesselListHtml += `<li>${v.name}</li>`;
+      groupedVessels.forEach(v => {
+        vesselListHtml += `<li>${v.quantity}x ${v.name} - $${v.totalPrice.toLocaleString()}</li>`;
       });
       vesselListHtml += '</ul></div>';
     } else {
-      // If 5 or fewer, show simple list
+      // If 5 or fewer types, show simple list
       vesselListHtml = '<br>';
-      vessels.forEach(v => {
-        vesselListHtml += `${v.name}<br>`;
+      groupedVessels.forEach(v => {
+        vesselListHtml += `${v.quantity}x ${v.name} - $${v.totalPrice.toLocaleString()}<br>`;
       });
     }
 
@@ -839,6 +1133,32 @@ router.post('/vessel/broadcast-purchase-summary', express.json(), async (req, re
       type: 'success',
       message
     });
+
+    // AUDIT LOG: Manual vessel purchase - Log matching the notification message
+    try {
+      const { auditLog, CATEGORIES, SOURCES } = require('../utils/audit-logger');
+
+      await auditLog(
+        userId,
+        CATEGORIES.VESSEL,
+        'Manual Vessel Purchase',
+        `Purchased ${vessels.length} vessel${vessels.length > 1 ? 's' : ''}! Total Cost: $${totalCost.toLocaleString()}`,
+        {
+          vessel_count: vessels.length,
+          total_cost: totalCost,
+          vessels: groupedVessels.map(v => ({
+            name: v.name,
+            quantity: v.quantity,
+            price_per_vessel: v.price,
+            total_price: v.totalPrice
+          }))
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+    } catch (auditError) {
+      logger.error('[Vessel Purchase] Audit logging failed:', auditError.message);
+    }
 
     // Broadcast bulk buy complete to unlock buttons
     broadcastToUser(userId, 'bulk_buy_complete', {
@@ -860,11 +1180,92 @@ router.post('/vessel/broadcast-purchase-summary', express.json(), async (req, re
   }
 });
 
+/**
+ * POST /api/vessel/broadcast-sale-summary - Broadcasts a summary notification of vessel sales to all clients
+ */
+router.post('/vessel/broadcast-sale-summary', express.json(), async (req, res) => {
+  const { vessels, totalPrice, totalVessels } = req.body;
+
+  if (!vessels || !Array.isArray(vessels)) {
+    return res.status(400).json({ error: 'Missing required field: vessels (array)' });
+  }
+
+  const userId = getUserId();
+  if (!userId) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    // Build vessel list HTML with prices
+    let vesselListHtml = '';
+    if (vessels.length > 5) {
+      // If more than 5, show scrollable list
+      vesselListHtml = '<div style="max-height: 200px; overflow-y: auto; margin: 10px 0; padding-right: 5px;"><ul style="margin: 0; padding-left: 20px; text-align: left;">';
+      vessels.forEach(v => {
+        vesselListHtml += `<li>${v.quantity}x ${v.name} - $${v.totalPrice.toLocaleString()}</li>`;
+      });
+      vesselListHtml += '</ul></div>';
+    } else {
+      // If 5 or fewer, show simple list
+      vesselListHtml = '<br>';
+      vessels.forEach(v => {
+        vesselListHtml += `${v.quantity}x ${v.name} - $${v.totalPrice.toLocaleString()}<br>`;
+      });
+    }
+
+    const message = `⛴️ <strong>Sold ${totalVessels} vessel${totalVessels > 1 ? 's' : ''}!</strong>${vesselListHtml}Total Revenue: $${totalPrice.toLocaleString()}`;
+
+    broadcastToUser(userId, 'user_action_notification', {
+      type: 'success',
+      message
+    });
+
+    // AUDIT LOG: Manual vessel sale - Log matching the notification message
+    try {
+      const { auditLog, CATEGORIES, SOURCES } = require('../utils/audit-logger');
+
+      await auditLog(
+        userId,
+        CATEGORIES.VESSEL,
+        'Manual Vessel Sale',
+        `Sold ${totalVessels} vessel${totalVessels > 1 ? 's' : ''}! Total Revenue: $${totalPrice.toLocaleString()}`,
+        {
+          vessel_count: totalVessels,
+          total_price: totalPrice,
+          vessels: vessels.map(v => ({
+            name: v.name,
+            quantity: v.quantity,
+            price_per_vessel: v.price,
+            total_price: v.totalPrice
+          }))
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+    } catch (auditError) {
+      logger.error('[Vessel Sale] Audit logging failed:', auditError.message);
+    }
+
+    // Trigger Harbor Map refresh (vessels sold)
+    const { broadcastHarborMapRefresh } = require('../websocket');
+    if (broadcastHarborMapRefresh) {
+      broadcastHarborMapRefresh(userId, 'vessels_sold', {
+        count: totalVessels
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Error broadcasting sale summary:', error);
+    res.status(500).json({ error: 'Failed to broadcast summary' });
+  }
+});
+
 /** POST /api/vessel/get-repair-preview - Gets repair preview with vessel list and costs */
 router.post('/vessel/get-repair-preview', express.json(), async (req, res) => {
   const { threshold } = req.body;
 
-  if (!threshold || threshold < 0 || threshold > 100) {
+  if (threshold === null || threshold === undefined || threshold < 0 || threshold > 100) {
     return res.status(400).json({ error: 'Invalid threshold' });
   }
 
@@ -997,6 +1398,43 @@ router.post('/vessel/bulk-repair', express.json(), async (req, res) => {
 
     logger.debug(`[Manual Bulk Repair] Repaired ${vesselsToRepair.length} vessels - costData.totalCost: $${totalCost.toLocaleString()}, calculatedTotalCost: $${calculatedTotalCost.toLocaleString()}, repairData.totalCost: $${repairData.totalCost.toLocaleString()}, Using: $${actualCost.toLocaleString()}`);
 
+    // AUDIT LOG: Manual bulk repair
+    const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+
+    // Validate data - FAIL LOUD if missing
+    if (vesselsToRepair.length === 0) {
+      throw new Error('No vessels to repair');
+    }
+
+    if (actualCost === 0) {
+      throw new Error('Repair cost is 0 - API data invalid');
+    }
+
+    await auditLog(
+      userId,
+      CATEGORIES.VESSEL,
+      'Manual Bulk Repair',
+      `Repaired ${vesselsToRepair.length} vessel(s) for ${formatCurrency(actualCost)}`,
+      {
+        vessel_count: vesselsToRepair.length,
+        total_cost: actualCost,
+        threshold: threshold,
+        vessels: vesselDetails.map(v => {
+          if (!v.cost) {
+            throw new Error(`Vessel ${v.id} (${v.name}) missing cost in repair data`);
+          }
+          return {
+            id: v.id,
+            name: v.name,
+            wear: v.wear,
+            cost: v.cost
+          };
+        })
+      },
+      'SUCCESS',
+      SOURCES.MANUAL
+    );
+
     // Broadcast success to all clients using same format as autopilot
     if (userId) {
       broadcastToUser(userId, 'vessels_repaired', {
@@ -1042,6 +1480,55 @@ router.post('/vessel/bulk-repair', express.json(), async (req, res) => {
   }
 });
 
+/** POST /api/vessel/rename-vessel - Rename a vessel */
+router.post('/vessel/rename-vessel', express.json(), async (req, res) => {
+  try {
+    const { vessel_id, name } = req.body;
+
+    // Validate input
+    if (!vessel_id) {
+      return res.status(400).json({ error: 'Vessel ID is required' });
+    }
+
+    if (!name || typeof name !== 'string') {
+      return res.status(400).json({ error: 'Vessel name is required' });
+    }
+
+    // Validate name length (2-30 characters)
+    const trimmedName = name.trim();
+    if (trimmedName.length < 2 || trimmedName.length > 30) {
+      return res.status(400).json({ error: 'Vessel name must be between 2 and 30 characters' });
+    }
+
+    logger.info(`[Vessel Rename] Renaming vessel ${vessel_id} to "${trimmedName}"`);
+
+    // Call game API
+    const data = await apiCall('/vessel/rename-vessel', 'POST', {
+      vessel_id: vessel_id,
+      name: trimmedName
+    });
+
+    logger.info(`[Vessel Rename] Success - Vessel ${vessel_id} renamed to "${trimmedName}"`);
+
+    // Broadcast Harbor Map refresh
+    const userId = getUserId();
+    if (userId) {
+      const { broadcastHarborMapRefresh } = require('../websocket');
+      if (broadcastHarborMapRefresh) {
+        broadcastHarborMapRefresh(userId, 'vessel_renamed', {
+          vessel_id: vessel_id,
+          new_name: trimmedName
+        });
+      }
+    }
+
+    res.json(data);
+  } catch (error) {
+    logger.error('[Vessel Rename] Error:', error.message);
+    res.status(500).json({ error: 'Failed to rename vessel' });
+  }
+});
+
 /** POST /api/check-price-alerts - Manually trigger price alert check (called on page load) */
 router.post('/check-price-alerts', async (req, res) => {
   try {
@@ -1068,8 +1555,14 @@ router.post('/autopilot/trigger-depart', async (req, res) => {
 
     logger.debug(`[Auto-Depart] Event-driven trigger received for user ${userId}`);
 
-    // Execute auto-depart directly
-    await autopilot.autoDepartVessels();
+    // Execute auto-depart with all required parameters
+    const { broadcastToUser } = require('../websocket');
+    await autopilot.autoDepartVessels(
+      autopilot.isAutopilotPaused(),
+      broadcastToUser,
+      autopilot.autoRebuyAll,
+      autopilot.tryUpdateAllData
+    );
 
     res.json({ success: true, message: 'Auto-depart triggered' });
   } catch (error) {

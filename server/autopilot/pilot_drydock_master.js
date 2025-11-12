@@ -12,7 +12,7 @@ const state = require('../state');
 const logger = require('../utils/logger');
 const { getUserId, apiCall } = require('../utils/api');
 const config = require('../config');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const DEBUG_MODE = config.DEBUG_MODE;
 
@@ -149,18 +149,20 @@ async function autoDrydockVessels(autopilotPaused, broadcastToUser, tryUpdateAll
     }
 
     // Log to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.VESSEL,
       'Auto-Drydock',
-      'SUCCESS',
-      `${vesselIds.length} vessels | ${maintenanceType} | ${speed} | $${totalCost.toLocaleString()}`,
+      `${vesselIds.length} vessels | ${maintenanceType} | ${speed} | ${formatCurrency(totalCost)}`,
       {
         vesselCount: vesselIds.length,
         maintenanceType,
         speed,
         totalCost: totalCost,
         drydockedVessels: vesselList
-      }
+      },
+      'SUCCESS',
+      SOURCES.AUTOPILOT
     );
 
     // Update all data to refresh drydock badge count
@@ -174,15 +176,17 @@ async function autoDrydockVessels(autopilotPaused, broadcastToUser, tryUpdateAll
     logger.error('[Auto-Drydock] Error:', error.message);
 
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.VESSEL,
       'Auto-Drydock',
-      'ERROR',
       `Drydock failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }

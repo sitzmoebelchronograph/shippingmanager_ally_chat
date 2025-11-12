@@ -30,7 +30,7 @@ const { autoRepairVessels } = require('./autopilot/pilot_yard_foreman');
 const { autoDrydockVessels } = require('./autopilot/pilot_drydock_master');
 const { autoCampaignRenewal } = require('./autopilot/pilot_reputation_chief');
 const { autoCoop } = require('./autopilot/pilot_fair_hand');
-const { autoAnchorPointPurchase } = require('./autopilot/pilot_harbormaster');
+const { autoAnchorPointPurchase, setBroadcastFunction: setHarbormasterBroadcast } = require('./autopilot/pilot_harbormaster');
 const { autoNegotiateHijacking } = require('./autopilot/pilot_captain_blackbeard');
 
 const DEBUG_MODE = config.DEBUG_MODE;
@@ -45,6 +45,9 @@ let broadcastToUser = null;
 function setBroadcastFunction(broadcastFn) {
   broadcastToUser = broadcastFn;
   logger.debug('[Autopilot] Broadcast function set:', broadcastFn ? 'OK' : 'NULL');
+
+  // Also inject into pilot modules that manage their own broadcast function
+  setHarbormasterBroadcast(broadcastFn);
 }
 
 // Global pause state
@@ -471,7 +474,7 @@ async function updateAllData() {
 
     // Update vessel counts (triggers Harbor Map refresh if open)
     // Vessels data already fetched above from /game/index
-    const readyToDepart = vessels.filter(v => v.status === 'port').length;
+    const readyToDepart = vessels.filter(v => v.status === 'port' && !v.is_parked).length;
     const atAnchor = vessels.filter(v => v.status === 'anchor').length;
     const pending = vessels.filter(v => v.status === 'pending').length;
 
@@ -528,14 +531,6 @@ async function analyzeVesselDepartures(allVessels, assignedPorts, settings) {
       toSkip.push({
         vessel,
         reason: 'No route assigned'
-      });
-      continue;
-    }
-
-    if (vessel.delivery_price !== null && vessel.delivery_price > 0) {
-      toSkip.push({
-        vessel,
-        reason: `Delivery contract active ($${vessel.delivery_price})`
       });
       continue;
     }
@@ -719,6 +714,62 @@ async function mainEventLoop() {
     const { broadcastHarborMapRefresh } = require('./websocket');
     if (broadcastHarborMapRefresh) {
       broadcastHarborMapRefresh(userId, 'interval', { readyToDepart, atAnchor, pending });
+    }
+
+    // CRITICAL: Update bunker/header data ALWAYS (regardless of pause state)
+    // This ensures cash, fuel, CO2, stock, etc. stay up-to-date even when paused
+    try {
+      const user = gameIndexData.user;
+      const gameSettings = gameIndexData.data.user_settings;
+
+      // Update bunker state (cash, fuel, CO2, points)
+      const bunkerUpdate = {
+        fuel: user.fuel / 1000,        // Convert kg to tons
+        co2: user.co2 / 1000,          // Convert kg to tons
+        cash: user.cash,
+        points: user.points,
+        maxFuel: gameSettings.max_fuel / 1000,
+        maxCO2: gameSettings.max_co2 / 1000
+      };
+      state.updateBunkerState(userId, bunkerUpdate);
+
+      if (broadcastToUser) {
+        const { broadcastBunkerUpdate } = require('./websocket');
+        broadcastBunkerUpdate(userId, bunkerUpdate);
+      }
+
+      // Update header data (stock, anchor slots)
+      const stockValue = user.stock_value;
+      const stockTrend = user.stock_trend;
+      const ipo = user.ipo;
+      const maxAnchorPoints = gameSettings.anchor_points;
+      const deliveredVessels = vessels.filter(v => v.status !== 'pending').length;
+      const pendingVessels = vessels.filter(v => v.status === 'pending').length;
+      const availableCapacity = maxAnchorPoints - deliveredVessels - pendingVessels;
+
+      const anchorNextBuild = gameSettings.anchor_next_build || null;
+      const now = Math.floor(Date.now() / 1000);
+      const settings = state.getSettings(userId);
+      const pendingAnchorPoints = (anchorNextBuild && anchorNextBuild > now) ? settings.pendingAnchorPoints : 0;
+
+      const headerUpdate = {
+        stock: { value: stockValue, trend: stockTrend, ipo },
+        anchor: {
+          available: availableCapacity,
+          max: maxAnchorPoints,
+          pending: pendingAnchorPoints,
+          nextBuild: anchorNextBuild
+        }
+      };
+      state.updateHeaderData(userId, headerUpdate);
+
+      if (broadcastToUser) {
+        broadcastToUser(userId, 'header_data_update', headerUpdate);
+      }
+
+      logger.debug('[Loop] Header/bunker data updated (cash: $' + Math.floor(bunkerUpdate.cash).toLocaleString() + ')');
+    } catch (error) {
+      logger.error('[Loop] Failed to update header/bunker data:', error.message);
     }
 
     // Skip automation if paused

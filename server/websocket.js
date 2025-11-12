@@ -458,6 +458,16 @@ function initWebSocket(server) {
             logger.debug('[WebSocket] OK Repair count sent');
           }
 
+          // Drydock count
+          const drydockCount = state.getDrydockCount(userId);
+          if (drydockCount !== undefined) {
+            ws.send(JSON.stringify({
+              type: 'drydock_count_update',
+              data: { count: drydockCount }
+            }));
+            logger.debug('[WebSocket] OK Drydock count sent');
+          }
+
           // Campaign status
           const campaignStatus = state.getCampaignStatus(userId);
           if (campaignStatus) {

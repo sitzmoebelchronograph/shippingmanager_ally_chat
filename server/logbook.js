@@ -177,6 +177,75 @@ async function logAutopilotAction(userId, autopilot, status, summary, details = 
 }
 
 /**
+ * Determines transaction type from log entry
+ * @param {object} log - Log entry
+ * @returns {string} - 'INCOME', 'EXPENSE', or ''
+ */
+function getTransactionType(log) {
+  if (!log.summary) return '';
+
+  // Income: summary contains "+$" (e.g., "+$1,234")
+  if (log.summary.includes('+$')) {
+    return 'INCOME';
+  }
+
+  // Expense: summary contains "-$" (e.g., "-$1,234") OR contains only "$" with specific autopilots
+  if (log.summary.includes('-$')) {
+    return 'EXPENSE';
+  }
+
+  // Additional expense autopilots that show cost without minus sign
+  const expenseAutopilots = ['Auto-Drydock', 'Auto-Fuel', 'Auto-CO2', 'Auto-Anchor Purchase', 'Auto-Reputation'];
+  if (expenseAutopilots.includes(log.autopilot) && log.summary.includes('$')) {
+    return 'EXPENSE';
+  }
+
+  return '';
+}
+
+/**
+ * Get category from action name
+ * @param {string} action - Action/autopilot name
+ * @returns {string} Category (BUNKER, VESSEL, AUTOPILOT, ANCHOR, SETTINGS)
+ */
+function getCategoryFromAction(action) {
+  if (!action) return 'AUTOPILOT';
+
+  if (action.includes('Fuel') || action.includes('CO2') || action.includes('Bunker')) {
+    return 'BUNKER';
+  }
+
+  if (action.includes('Vessel') || action.includes('Depart') || action.includes('Repair') || action.includes('Drydock')) {
+    return 'VESSEL';
+  }
+
+  if (action.includes('Anchor')) {
+    return 'ANCHOR';
+  }
+
+  if (action.includes('Settings')) {
+    return 'SETTINGS';
+  }
+
+  return 'AUTOPILOT';
+}
+
+/**
+ * Get source from action name
+ * @param {string} action - Action/autopilot name
+ * @returns {string} Source (MANUAL or AUTOPILOT)
+ */
+function getSourceFromAction(action) {
+  if (!action) return 'AUTOPILOT';
+
+  if (action.startsWith('Manual ') || action.includes('Manual')) {
+    return 'MANUAL';
+  }
+
+  return 'AUTOPILOT';
+}
+
+/**
  * Recursively searches through an object for a search term
  * @param {*} obj - Object to search through
  * @param {string} searchTerm - Term to search for (case-insensitive)
@@ -229,9 +298,24 @@ async function getLogEntries(userId, filters = {}) {
     logs = logs.filter(log => log.status === filters.status);
   }
 
+  // Apply transaction filter
+  if (filters.transaction && filters.transaction !== 'ALL') {
+    logs = logs.filter(log => getTransactionType(log) === filters.transaction);
+  }
+
   // Apply autopilot filter
   if (filters.autopilot && filters.autopilot !== 'ALL') {
     logs = logs.filter(log => log.autopilot === filters.autopilot);
+  }
+
+  // Apply category filter
+  if (filters.category && filters.category !== 'ALL') {
+    logs = logs.filter(log => getCategoryFromAction(log.autopilot) === filters.category);
+  }
+
+  // Apply source filter
+  if (filters.source && filters.source !== 'ALL') {
+    logs = logs.filter(log => getSourceFromAction(log.autopilot) === filters.source);
   }
 
   // Apply time range filter

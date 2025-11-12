@@ -11,7 +11,7 @@ const cache = require('../cache');
 const state = require('../state');
 const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 /**
  * Automatically sends available COOP vessels to alliance members.
@@ -164,17 +164,19 @@ async function autoCoop(autopilotPaused, broadcastToUser, tryUpdateAllData) {
 
     // Log to autopilot logbook
     if (totalSent > 0) {
-      await logAutopilotAction(
+      await auditLog(
         userId,
+        CATEGORIES.COOP,
         'Auto-COOP',
-        'SUCCESS',
         `${totalSent} vessels | ${results.length} members`,
         {
           totalVessels: totalSent,
           totalRequested,
           recipientCount: results.length,
           distributions: results
-        }
+        },
+        'SUCCESS',
+        SOURCES.AUTOPILOT
       );
     }
 
@@ -186,15 +188,17 @@ async function autoCoop(autopilotPaused, broadcastToUser, tryUpdateAllData) {
 
   } catch (error) {
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.COOP,
       'Auto-COOP',
-      'ERROR',
       `COOP distribution failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
 
     // AggregateError contains multiple errors in .errors array

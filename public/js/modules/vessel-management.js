@@ -52,6 +52,7 @@ import {
 } from './api.js';
 import { showConfirmDialog } from './ui-dialogs.js';
 import { getCurrentBunkerState, updateCurrentCash, updateCurrentFuel, updateCurrentCO2 } from './bunker-management.js';
+import { updateBadge, updateButtonState, updateButtonTooltip, BADGE_COLORS } from './badge-manager.js';
 
 /**
  * Load cart from localStorage (user-specific)
@@ -189,7 +190,7 @@ export async function updateVesselCount() {
     const data = await fetchVessels();
     const vessels = data.vessels || [];
 
-    const readyToDepart = vessels.filter(v => v.status === 'port').length;
+    const readyToDepart = vessels.filter(v => v.status === 'port' && !v.is_parked).length;
     const atAnchor = vessels.filter(v => v.status === 'anchor').length;
     const pendingVessels = vessels.filter(v => v.status === 'pending').length;
 
@@ -203,26 +204,13 @@ export async function updateVesselCount() {
       await window.harborMap.refreshIfOpen();
     }
 
-    // Update pending badge - always show current value
-    const pendingBadge = document.getElementById('pendingVesselsBadge');
+    // Update pending vessels badge
+    updateBadge('pendingVesselsBadge', pendingVessels, pendingVessels > 0, 'ORANGE');
+    updateButtonTooltip('buyVessels', pendingVessels > 0 ? `Vessels in delivery: ${pendingVessels}` : 'Buy vessels');
+
+    // Update pending filter button in overlay (if exists)
     const pendingBtn = document.getElementById('filterPendingBtn');
     const pendingCountSpan = document.getElementById('pendingCount');
-
-    if (pendingBadge) {
-      pendingBadge.textContent = pendingVessels;
-      if (pendingVessels > 0) {
-        pendingBadge.classList.remove('hidden');
-      } else {
-        pendingBadge.classList.add('hidden');
-      }
-
-      // Update buyVesselsBtn tooltip to show pending count
-      const buyVesselsBtn = document.getElementById('buyVesselsBtn');
-      if (buyVesselsBtn) {
-        buyVesselsBtn.title = pendingVessels > 0 ? `Vessels in delivery: ${pendingVessels}` : 'Buy vessels';
-      }
-    }
-
     if (pendingBtn && pendingCountSpan) {
       pendingCountSpan.textContent = pendingVessels;
       if (pendingVessels > 0) {
@@ -232,38 +220,22 @@ export async function updateVesselCount() {
       }
     }
 
-    const countBadge = document.getElementById('vesselCount');
-    const departBtn = document.getElementById('departAllBtn');
+    // Update depart badge and button
+    updateBadge('vesselCount', readyToDepart, readyToDepart > 0, 'BLUE');
+    updateButtonState('departAll', readyToDepart === 0 || isDepartingInProgress);
+    updateButtonTooltip('departAll',
+      readyToDepart > 0
+        ? `Depart all ${readyToDepart} vessel${readyToDepart === 1 ? '' : 's'} from harbor`
+        : 'No vessels ready to depart'
+    );
 
-    // Update depart badge and button - always show current value
-    if (readyToDepart > 0) {
-      countBadge.textContent = readyToDepart;
-      countBadge.classList.remove('hidden');
-      // Only enable button if no departure operation is in progress
-      if (!isDepartingInProgress) {
-        departBtn.disabled = false;
-      }
-      departBtn.title = `Depart all ${readyToDepart} vessel${readyToDepart === 1 ? '' : 's'} from harbor`;
-    } else {
-      countBadge.classList.add('hidden');
-      departBtn.disabled = true;
-      departBtn.title = 'No vessels ready to depart';
-    }
-
-    const anchorBadge = document.getElementById('anchorCount');
-    const anchorBtn = document.getElementById('anchorBtn');
-
-    // Update anchor badge and button - button always enabled for purchasing
-    if (atAnchor > 0) {
-      anchorBadge.textContent = atAnchor;
-      anchorBadge.classList.remove('hidden');
-      // anchorBtn.disabled = false;  // Always enabled
-      anchorBtn.title = `${atAnchor} vessel${atAnchor === 1 ? '' : 's'} at anchor - Click to purchase anchor points`;
-    } else {
-      anchorBadge.classList.add('hidden');
-      // anchorBtn.disabled = false;  // Always enabled
-      anchorBtn.title = 'Purchase anchor points';
-    }
+    // Update anchor badge and button
+    updateBadge('anchorCount', atAnchor, atAnchor > 0, 'RED');
+    updateButtonTooltip('anchor',
+      atAnchor > 0
+        ? `${atAnchor} vessel${atAnchor === 1 ? '' : 's'} at anchor - Click to purchase anchor points`
+        : 'Purchase anchor points'
+    );
 
     const settingsResponse = await fetchUserSettings();
     if (settingsResponse) {
@@ -348,11 +320,9 @@ export async function updateVesselCount() {
  * // Shows: "5 vessels departed! Fuel: 150t, CO2: 45t, Net income: $125,000"
  */
 export async function departAllVessels() {
-  const departBtn = document.getElementById('departAllBtn');
-
   // Mark departure as in progress and disable button
   isDepartingInProgress = true;
-  departBtn.disabled = true;
+  updateButtonState('departAll', true);
 
   try {
     const data = await apiDepartAllVessels();
@@ -364,7 +334,7 @@ export async function departAllVessels() {
     // Re-enable button immediately so user can retry after fixing the issue
     if (data.success === false) {
       isDepartingInProgress = false;
-      departBtn.disabled = false;
+      updateButtonState('departAll', false);
       if (window.DEBUG_MODE) console.log('[Depart All] Departure failed:', data.reason);
     }
 
@@ -375,7 +345,7 @@ export async function departAllVessels() {
     // Network errors or other exceptions
     console.error('[Depart All] Error:', error);
     isDepartingInProgress = false;
-    departBtn.disabled = false;
+    updateButtonState('departAll', false);
   }
 }
 
@@ -389,23 +359,26 @@ export async function updateRepairCount(settings) {
       return wear >= settings.maintenanceThreshold;
     });
 
-    const countBadge = document.getElementById('repairCount');
-    const repairBtn = document.getElementById('repairAllBtn');
+    // Update repair badge using badge-manager
+    updateBadge('repairCount', vesselsNeedingRepair.length, vesselsNeedingRepair.length > 0, 'RED');
 
-    if (vesselsNeedingRepair.length > 0) {
-      countBadge.textContent = vesselsNeedingRepair.length;
-      countBadge.classList.remove('hidden');
-      // Remove any color classes and inline styles - repair badge is ALWAYS red
-      countBadge.classList.remove('badge-green-bg', 'badge-orange-bg', 'badge-red-bg');
-      countBadge.style.backgroundColor = '';  // Clear inline style
+    // Get drydock count from badge (if exists)
+    const drydockBadge = document.querySelector('.map-icon-item[data-action="repairAll"] .map-icon-badge-bottom-left');
+    const drydockCount = drydockBadge ? (parseInt(drydockBadge.textContent) || 0) : 0;
 
-      repairBtn.disabled = false;
-      repairBtn.title = `Repair ${vesselsNeedingRepair.length} vessel${vesselsNeedingRepair.length === 1 ? '' : 's'} with ${settings.maintenanceThreshold}%+ wear`;
+    // Update button state (check both repair AND drydock counts)
+    const hasWork = vesselsNeedingRepair.length > 0 || drydockCount > 0;
+    updateButtonState('repairAll', !hasWork);
+
+    // Update tooltip
+    if (vesselsNeedingRepair.length > 0 && drydockCount > 0) {
+      updateButtonTooltip('repairAll', `Repair ${vesselsNeedingRepair.length} vessel${vesselsNeedingRepair.length === 1 ? '' : 's'} or drydock ${drydockCount} vessel${drydockCount === 1 ? '' : 's'}`);
+    } else if (vesselsNeedingRepair.length > 0) {
+      updateButtonTooltip('repairAll', `Repair ${vesselsNeedingRepair.length} vessel${vesselsNeedingRepair.length === 1 ? '' : 's'} with ${settings.maintenanceThreshold}%+ wear`);
+    } else if (drydockCount > 0) {
+      updateButtonTooltip('repairAll', `Drydock ${drydockCount} vessel${drydockCount === 1 ? '' : 's'}`);
     } else {
-      countBadge.classList.add('hidden');
-      countBadge.style.backgroundColor = '';  // Clear inline style
-      repairBtn.disabled = true;
-      repairBtn.title = `No vessels with ${settings.maintenanceThreshold}%+ wear`;
+      updateButtonTooltip('repairAll', 'No vessels need repair or drydock');
     }
   } catch (error) {
     console.error('Error updating repair count:', error);
@@ -453,8 +426,12 @@ export async function updateRepairCount(settings) {
  */
 /**
  * Shows tabbed dialog with Wear Repairs and Drydock tabs
+ * @param {Object} settings - User settings
+ * @param {number} repairCount - Badge count for repairs
+ * @param {number} drydockCount - Badge count for drydock
+ * @param {number} [specificVesselId] - Optional: Show only this vessel
  */
-async function showRepairAndDrydockDialog(settings, repairCount, drydockCount) {
+async function showRepairAndDrydockDialog(settings, repairCount, drydockCount, specificVesselId = null) {
   return new Promise(async (resolve) => {
     const overlay = document.createElement('div');
     overlay.className = 'confirm-dialog-overlay';
@@ -462,54 +439,215 @@ async function showRepairAndDrydockDialog(settings, repairCount, drydockCount) {
     const dialog = document.createElement('div');
     dialog.className = 'confirm-dialog bulk-repair-dialog';
 
+    // Show dialog immediately with loading state
+    dialog.innerHTML = `
+      <div class="confirm-dialog-header">
+        <h3>🔧 Vessel Maintenance</h3>
+        <div class="confirm-dialog-buttons">
+          <button class="confirm-dialog-btn cancel" data-action="cancel-loading">Close</button>
+        </div>
+      </div>
+      <div class="confirm-dialog-body" style="text-align: center; padding: 60px;">
+        <div style="font-size: 32px; margin-bottom: 16px;">⏳</div>
+        <div style="color: #9ca3af;">Loading vessel data...</div>
+      </div>
+    `;
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+
+    // Allow closing during loading
+    let isCancelled = false;
+    const cancelButton = dialog.querySelector('[data-action="cancel-loading"]');
+    if (cancelButton) {
+      cancelButton.addEventListener('click', () => {
+        isCancelled = true;
+        overlay.remove();
+        resolve(false);
+      });
+    }
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        isCancelled = true;
+        overlay.remove();
+        resolve(false);
+      }
+    });
+
     // Determine initial active tab based on badge counts
     let activeTab = repairCount > 0 ? 'repair' : 'drydock';
 
-    // Fetch data for both tabs
-    const [repairData, drydockDataRaw] = await Promise.all([
-      repairCount > 0 ? fetch(window.apiUrl('/api/vessel/get-repair-preview'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threshold: settings.maintenanceThreshold })
-      }).then(res => res.json()) : Promise.resolve({ vessels: [] }),
+    // Declare repairData and drydockData outside if/else
+    let repairData;
+    let drydockData;
 
-      drydockCount > 0 ? fetch(window.apiUrl('/api/game/index'), {
+    // If specific vessel ID provided, fetch only that vessel
+    if (specificVesselId) {
+      const indexResponse = await fetch(window.apiUrl('/api/game/index'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
-      }).then(res => res.json()).then(data => {
-        const vessels = data.data.user_vessels || [];
-        return vessels.filter(v => {
-          const hours = v.hours_until_check !== undefined ? v.hours_until_check : 999;
-          return hours <= settings.autoDrydockThreshold;
+      });
+      const indexData = await indexResponse.json();
+      const allVessels = indexData.data.user_vessels || [];
+      const specificVessel = allVessels.find(v => v.id === specificVesselId);
+
+      if (!specificVessel) {
+        showSideNotification('Vessel not found', 'error');
+        resolve(false);
+        return;
+      }
+
+      // Fetch repair cost for specific vessel (IGNORE thresholds - always show)
+      const wear = parseFloat(specificVessel.wear) || 0;
+      let repairCostData = { vessels: [], totalCost: 0, cash: 0 };
+
+      try {
+        const repairResponse = await fetch(window.apiUrl('/api/vessel/get-repair-preview'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ threshold: 0 }) // Use threshold 0 to get all vessels
         });
-      }) : Promise.resolve([])
-    ]);
+        const allRepairData = await repairResponse.json();
 
-    // Fetch drydock costs
-    let drydockData = { vessels: [], totalCost: 0, cash: 0 };
-    if (drydockDataRaw.length > 0) {
-      const vesselIds = drydockDataRaw.map(v => v.id);
-      const costResponse = await fetch(window.apiUrl('/api/maintenance/get-drydock-status'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          vessel_ids: JSON.stringify(vesselIds),
-          speed: settings.autoDrydockSpeed || 'minimum',
-          maintenance_type: settings.autoDrydockType || 'major'
-        })
-      });
-      const costData = await costResponse.json();
-
-      // Merge vessel data with costs
-      drydockData.vessels = drydockDataRaw.map(v => {
-        const costVessel = costData.vessels?.find(cv => cv.id === v.id);
-        return {
-          ...v,
-          cost: costVessel?.cost || 0
+        // Filter for specific vessel
+        const specificRepairVessel = allRepairData.vessels?.find(v => v.id === specificVesselId);
+        if (specificRepairVessel) {
+          // Found in API response - use real cost
+          repairCostData = {
+            vessels: [specificRepairVessel],
+            totalCost: specificRepairVessel.cost || 0,
+            cash: allRepairData.cash || 0
+          };
+        } else {
+          // Not in API response (probably wear = 0%) - add manually with $0 cost
+          repairCostData = {
+            vessels: [{
+              id: specificVessel.id,
+              name: specificVessel.name,
+              wear: wear.toFixed(2),
+              cost: 0
+            }],
+            totalCost: 0,
+            cash: allRepairData.cash || indexData.data.bunker?.cash || 0
+          };
+        }
+      } catch (error) {
+        console.error('[Vessel Management] Failed to fetch repair costs:', error);
+        // Fallback: show vessel with $0 cost
+        repairCostData = {
+          vessels: [{
+            id: specificVessel.id,
+            name: specificVessel.name,
+            wear: wear.toFixed(2),
+            cost: 0
+          }],
+          totalCost: 0,
+          cash: indexData.data.bunker?.cash || 0
         };
-      });
-      drydockData.totalCost = costData.totalCost || 0;
-      drydockData.cash = costData.cash || 0;
+      }
+
+      repairData = {
+        vessels: repairCostData.vessels,
+        totalCost: repairCostData.totalCost,
+        cash: repairCostData.cash
+      };
+
+      // Prepare drydock data for specific vessel (IGNORE thresholds - always show)
+      const drydockDataRaw = [specificVessel];
+      const vesselIds = [specificVessel.id];
+
+      let costData = { vessels: [], totalCost: 0, cash: 0 };
+      try {
+        const costResponse = await fetch(window.apiUrl('/api/maintenance/get-drydock-status'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vessel_ids: JSON.stringify(vesselIds),
+            speed: settings.autoDrydockSpeed || 'minimum',
+            maintenance_type: settings.autoDrydockType || 'major'
+          })
+        });
+        costData = await costResponse.json();
+        console.log('[Vessel Management] Drydock cost response:', costData);
+      } catch (error) {
+        console.error('[Vessel Management] Failed to fetch drydock costs:', error);
+      }
+
+      // ALWAYS show vessel, even if API returns no cost (e.g., 350h until check)
+      drydockData = {
+        vessels: drydockDataRaw.map(v => {
+          const costVessel = costData.vessels?.find(cv => cv.id === v.id);
+          return {
+            ...v,
+            cost: costVessel?.cost || 0
+          };
+        }),
+        totalCost: costData.totalCost || 0,
+        cash: costData.cash || repairCostData.cash || 0
+      };
+
+      // Determine active tab based on what's available
+      activeTab = repairData.vessels.length > 0 ? 'repair' : 'drydock';
+
+      // Update counts for badge display
+      repairCount = repairData.vessels.length;
+      drydockCount = drydockData.vessels.length;
+
+      // Continue with dialog rendering below (skip fetch)
+    } else {
+      // Fetch data for both tabs (normal mode - all vessels meeting criteria)
+      const [repairDataFetch, drydockDataRaw] = await Promise.all([
+        repairCount > 0 ? fetch(window.apiUrl('/api/vessel/get-repair-preview'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ threshold: settings.maintenanceThreshold })
+        }).then(res => res.json()) : Promise.resolve({ vessels: [] }),
+
+        drydockCount > 0 ? fetch(window.apiUrl('/api/game/index'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }).then(res => res.json()).then(data => {
+          const vessels = data.data.user_vessels || [];
+          return vessels.filter(v => {
+            const hours = v.hours_until_check !== undefined ? v.hours_until_check : 999;
+            const alreadyScheduled = v.next_route_is_maintenance === true;
+            return hours <= settings.autoDrydockThreshold && !alreadyScheduled;
+          });
+        }) : Promise.resolve([])
+      ]);
+
+      repairData = repairDataFetch;
+
+      // Fetch drydock costs
+      drydockData = { vessels: [], totalCost: 0, cash: 0 };
+      if (drydockDataRaw.length > 0) {
+        const vesselIds = drydockDataRaw.map(v => v.id);
+        const costResponse = await fetch(window.apiUrl('/api/maintenance/get-drydock-status'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vessel_ids: JSON.stringify(vesselIds),
+            speed: settings.autoDrydockSpeed || 'minimum',
+            maintenance_type: settings.autoDrydockType || 'major'
+          })
+        });
+        const costData = await costResponse.json();
+
+        // Merge vessel data with costs
+        drydockData.vessels = drydockDataRaw.map(v => {
+          const costVessel = costData.vessels?.find(cv => cv.id === v.id);
+          return {
+            ...v,
+            cost: costVessel?.cost || 0
+          };
+        });
+        drydockData.totalCost = costData.totalCost || 0;
+        drydockData.cash = costData.cash || 0;
+      }
+    }
+
+    // If user cancelled during loading, don't update dialog
+    if (isCancelled) {
+      return;
     }
 
     const updateDialog = () => {
@@ -543,7 +681,7 @@ async function showRepairAndDrydockDialog(settings, repairCount, drydockCount) {
           </div>
 
           <div class="tab-content ${activeTab === 'drydock' ? 'tab-active' : ''}" id="drydockTab">
-            ${renderDrydockTab(drydockData, settings)}
+            ${renderDrydockTab(drydockData, settings, specificVesselId !== null)}
           </div>
         </div>
       `;
@@ -566,8 +704,37 @@ async function showRepairAndDrydockDialog(settings, repairCount, drydockCount) {
       const repairExecuteBtn = dialog.querySelector('#executeRepair');
       if (repairExecuteBtn) {
         repairExecuteBtn.addEventListener('click', async () => {
+          // Close dialog
           overlay.remove();
-          await repairAllVessels(settings);
+
+          // Execute repair directly (no need to reload data - we already have it)
+          // Disable repair button during operation
+          updateButtonState('repairAll', true);
+
+          try {
+            // Call backend to repair all vessels
+            const response = await fetch(window.apiUrl('/api/vessel/bulk-repair'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ threshold: settings.maintenanceThreshold })
+            });
+
+            const data = await response.json();
+
+            // Re-enable button
+            updateButtonState('repairAll', false);
+
+            // Update counts
+            if (window.debouncedUpdateRepairCount && window.debouncedUpdateBunkerStatus) {
+              setTimeout(() => window.debouncedUpdateRepairCount(800), 1000);
+              setTimeout(() => window.debouncedUpdateBunkerStatus(800), 1200);
+            }
+          } catch (error) {
+            console.error('[Bulk Repair] Error:', error);
+            // Re-enable button on error
+            updateButtonState('repairAll', false);
+          }
+
           resolve(true);
         });
       }
@@ -580,19 +747,66 @@ async function showRepairAndDrydockDialog(settings, repairCount, drydockCount) {
           resolve(true);
         });
       }
+
+      // Live update drydock costs when speed or type changes
+      const drydockSpeedSelect = dialog.querySelector('#drydockSpeed');
+      const drydockTypeSelect = dialog.querySelector('#drydockType');
+
+      const updateDrydockCosts = async () => {
+        if (!drydockSpeedSelect || !drydockTypeSelect) return;
+
+        const selectedSpeed = drydockSpeedSelect.value;
+        const selectedType = drydockTypeSelect.value;
+
+        // Get all vessel IDs from drydockData
+        const vesselIds = drydockData.vessels.map(v => v.id);
+        if (vesselIds.length === 0) return;
+
+        try {
+          const costResponse = await fetch(window.apiUrl('/api/maintenance/get-drydock-status'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              vessel_ids: JSON.stringify(vesselIds),
+              speed: selectedSpeed,
+              maintenance_type: selectedType
+            })
+          });
+          const costData = await costResponse.json();
+
+          // Update drydockData with new costs
+          drydockData.vessels = drydockData.vessels.map(v => {
+            const costVessel = costData.vessels?.find(cv => cv.id === v.id);
+            return {
+              ...v,
+              cost: costVessel?.cost || 0
+            };
+          });
+          drydockData.totalCost = costData.totalCost || 0;
+          drydockData.cash = costData.cash || drydockData.cash;
+
+          // Update settings temporarily for rendering
+          settings.autoDrydockSpeed = selectedSpeed;
+          settings.autoDrydockType = selectedType;
+
+          // Re-render dialog
+          updateDialog();
+        } catch (error) {
+          console.error('[Vessel Management] Failed to update drydock costs:', error);
+        }
+      };
+
+      if (drydockSpeedSelect) {
+        drydockSpeedSelect.addEventListener('change', updateDrydockCosts);
+      }
+      if (drydockTypeSelect) {
+        drydockTypeSelect.addEventListener('change', updateDrydockCosts);
+      }
     };
 
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-
+    // Update dialog content (overlay already added to DOM above)
     updateDialog();
-
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) {
-        overlay.remove();
-        resolve(false);
-      }
-    });
+    // Note: overlay click listener already added above during loading state
   });
 }
 
@@ -649,8 +863,11 @@ function renderRepairTab(costData, settings) {
 
 /**
  * Renders the Drydock tab content
+ * @param {Object} drydockData - Drydock vessels and costs
+ * @param {Object} settings - User settings
+ * @param {boolean} [isSpecificVessel=false] - Whether showing specific vessel (hides threshold)
  */
-function renderDrydockTab(drydockData, settings) {
+function renderDrydockTab(drydockData, settings, isSpecificVessel = false) {
   const vessels = drydockData.vessels || [];
   const totalCost = drydockData.totalCost || 0;
   const bunkerCash = drydockData.cash || 0;
@@ -700,10 +917,12 @@ function renderDrydockTab(drydockData, settings) {
         <span class="label">Speed:</span>
         <span class="value">${speedLabel}</span>
       </div>
-      <div class="summary-row threshold">
-        <span class="label">Hours Threshold:</span>
-        <span class="value">${settings.autoDrydockThreshold}h</span>
-      </div>
+      ${!isSpecificVessel ? `
+        <div class="summary-row threshold">
+          <span class="label">Hours Threshold:</span>
+          <span class="value">${settings.autoDrydockThreshold}h</span>
+        </div>
+      ` : ''}
     </div>
     <div class="drydock-options">
       <div class="drydock-option-group">
@@ -855,59 +1074,42 @@ function showBulkRepairDialog(costData, threshold) {
 
 /**
  * Opens tabbed dialog with Wear Repairs and Drydock options
+ * @param {Object} settings - User settings
+ * @param {number} [specificVesselId] - Optional: Show only this vessel
  */
-export async function openRepairAndDrydockDialog(settings) {
-  const repairBtn = document.getElementById('repairAllBtn');
-  const repairCountBadge = document.getElementById('repairCount');
-  const drydockCountBadge = document.getElementById('drydockCount');
+export async function openRepairAndDrydockDialog(settings, specificVesselId = null) {
+  // Get badge counts from map icon bar
+  const repairCountBadge = document.querySelector('.map-icon-item[data-action="repairAll"] .map-icon-badge');
+  const drydockCountBadge = document.querySelector('.map-icon-item[data-action="repairAll"] .map-icon-badge-bottom-left');
 
-  const repairCount = parseInt(repairCountBadge.textContent) || 0;
-  const drydockCount = parseInt(drydockCountBadge.textContent) || 0;
+  const repairCount = repairCountBadge ? (parseInt(repairCountBadge.textContent) || 0) : 0;
+  const drydockCount = drydockCountBadge ? (parseInt(drydockCountBadge.textContent) || 0) : 0;
 
-  if (repairCount === 0 && drydockCount === 0) {
+  // If specific vessel ID provided, always show dialog (even if counts are 0)
+  if (!specificVesselId && repairCount === 0 && drydockCount === 0) {
     showSideNotification('No vessels need repair or drydock', 'info');
     return;
   }
 
   // Show tabbed dialog
-  await showRepairAndDrydockDialog(settings, repairCount, drydockCount);
+  await showRepairAndDrydockDialog(settings, repairCount, drydockCount, specificVesselId);
 }
 
 export async function repairAllVessels(settings) {
-  const repairBtn = document.getElementById('repairAllBtn');
-  const repairCountBadge = document.getElementById('repairCount');
-  const vesselsNeedingRepair = parseInt(repairCountBadge.textContent) || 0;
+  // Get repair count from badge
+  const repairCountBadge = document.querySelector('.map-icon-item[data-action="repairAll"] .map-icon-badge');
+  const vesselsNeedingRepair = repairCountBadge ? (parseInt(repairCountBadge.textContent) || 0) : 0;
 
   if (vesselsNeedingRepair === 0) return;
 
-  // Store original button state (icon + badge count, NO classes to avoid persisting wrong colors)
-  const originalBadgeCount = repairCountBadge.textContent;
-  const originalBadgeVisible = !repairCountBadge.classList.contains('hidden');
-
-  // Helper function to restore button to normal state
-  const restoreButton = () => {
-    repairBtn.disabled = false;
-    repairBtn.classList.remove('disabled', 'cursor-wait');
-    repairBtn.classList.add('btn-enabled');
-    const badge = repairBtn.querySelector('#repairCount');
-    repairBtn.innerHTML = '🔧';
-    if (badge) {
-      repairBtn.appendChild(badge);
-      badge.textContent = originalBadgeCount;
-      // Remove any color classes
-      badge.classList.remove('badge-green-bg', 'badge-orange-bg', 'badge-red-bg');
-      if (originalBadgeVisible) {
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
-      }
-    }
-  };
+  // Store original badge count
+  const originalBadgeCount = repairCountBadge ? repairCountBadge.textContent : '0';
+  const originalBadgeVisible = repairCountBadge ? !repairCountBadge.classList.contains('hidden') : false;
 
   try {
     // Fetch vessel data and repair costs from backend
-    // During preview: just disable, no visual processing state yet
-    repairBtn.disabled = true;
+    // Disable button during preview
+    updateButtonState('repairAll', true);
 
     const costResponse = await fetch(window.apiUrl('/api/vessel/get-repair-preview'), {
       method: 'POST',
@@ -916,7 +1118,7 @@ export async function repairAllVessels(settings) {
     });
 
     const costData = await costResponse.json();
-    repairBtn.disabled = false;
+    updateButtonState('repairAll', false);
 
     if (!costData.vessels || costData.vessels.length === 0) {
       showSideNotification('No vessels need repair', 'info');
@@ -928,16 +1130,8 @@ export async function repairAllVessels(settings) {
 
     if (!confirmed) return;
 
-    // NOW show processing state (after user confirmed)
-    repairBtn.disabled = true;
-    repairBtn.classList.add('disabled', 'cursor-wait');
-    // Only replace button icon, keep badge element intact
-    const savedBadge = repairBtn.querySelector('#repairCount');
-    repairBtn.innerHTML = '⏳';
-    if (savedBadge) {
-      repairBtn.appendChild(savedBadge);
-      savedBadge.classList.add('hidden');
-    }
+    // Disable button during repair
+    updateButtonState('repairAll', true);
 
     // Call backend which handles everything and broadcasts to all clients
     const response = await fetch(window.apiUrl('/api/vessel/bulk-repair'), {
@@ -951,8 +1145,8 @@ export async function repairAllVessels(settings) {
     // Backend broadcasts notification to ALL clients via WebSocket
     // No need to show notification here - all clients will receive it
 
-    // Restore button appearance
-    restoreButton();
+    // Re-enable button
+    updateButtonState('repairAll', false);
 
     // Still update locally for immediate feedback
     if (window.debouncedUpdateRepairCount && window.debouncedUpdateBunkerStatus) {
@@ -964,8 +1158,8 @@ export async function repairAllVessels(settings) {
     // Error notifications are also broadcasted by backend
     console.error('[Bulk Repair] Error:', error);
 
-    // Restore button appearance on error
-    restoreButton();
+    // Re-enable button on error
+    updateButtonState('repairAll', false);
   }
 }
 
@@ -1132,7 +1326,7 @@ export function showPendingVessels(pendingVessels) {
   let loadedCount = 0;
 
   initialBatch.forEach(vessel => {
-    const imageUrl = `https://shippingmanager.cc/images/acquirevessels/${vessel.type}`;
+    const imageUrl = `/api/vessel-image/${vessel.type}`;
 
     let timeDisplay = '';
     const remaining = vessel.time_arrival || 0;
@@ -1259,7 +1453,7 @@ function loadMorePendingVessels() {
 
   // Insert new vessels before sentinel
   nextBatch.forEach(vessel => {
-    const imageUrl = `https://shippingmanager.cc/images/acquirevessels/${vessel.type}`;
+    const imageUrl = `/api/vessel-image/${vessel.type}`;
 
     let timeDisplay = '';
     const remaining = vessel.time_arrival || 0;
@@ -1374,7 +1568,7 @@ export function displayVessels() {
   filtered.forEach(vessel => {
     const selectedItem = selectedVessels.find(v => v.vessel.id === vessel.id);
     const isSelected = !!selectedItem;
-    const imageUrl = `https://shippingmanager.cc/images/acquirevessels/${vessel.type}`;
+    const imageUrl = `/api/vessel-image/${vessel.type}`;
 
     // Check if anchor slots are available
     const availableSlots = getAvailableAnchorSlots();
@@ -1396,7 +1590,7 @@ export function displayVessels() {
     }
 
     const card = document.createElement('div');
-    card.className = `vessel-card${isSelected ? ' selected' : ''}`;
+    card.className = 'vessel-card';
     card.innerHTML = `
       <div class="vessel-image-container">
         <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
@@ -2023,10 +2217,7 @@ export function getVesselFilter() {
  */
 export function lockDepartButton() {
   isDepartingInProgress = true;
-  const departBtn = document.getElementById('departAllBtn');
-  if (departBtn) {
-    departBtn.disabled = true;
-  }
+  updateButtonState('departAll', true);
   if (window.DEBUG_MODE) console.log('[Depart Button] Locked - departure in progress');
 }
 
@@ -2037,13 +2228,10 @@ export function lockDepartButton() {
  */
 export function unlockDepartButton() {
   isDepartingInProgress = false;
-  const departBtn = document.getElementById('departAllBtn');
-  if (departBtn) {
-    // Check if there are vessels ready to depart
-    const countBadge = document.getElementById('vesselCount');
-    const hasVessels = countBadge && !countBadge.classList.contains('hidden') && parseInt(countBadge.textContent) > 0;
-    departBtn.disabled = !hasVessels;
-  }
+  // Check if there are vessels ready to depart
+  const countBadge = document.querySelector('.map-icon-item[data-action="departAll"] .map-icon-badge');
+  const hasVessels = countBadge && !countBadge.classList.contains('hidden') && parseInt(countBadge.textContent) > 0;
+  updateButtonState('departAll', !hasVessels);
   if (window.DEBUG_MODE) console.log('[Depart Button] Unlocked - departure complete');
 }
 
@@ -2054,10 +2242,7 @@ export function unlockDepartButton() {
  */
 export function lockRepairButton() {
   isRepairingInProgress = true;
-  const repairBtn = document.getElementById('repairAllBtn');
-  if (repairBtn) {
-    repairBtn.disabled = true;
-  }
+  updateButtonState('repairAll', true);
   if (window.DEBUG_MODE) console.log('[Repair Button] Locked - repair in progress');
 }
 
@@ -2068,10 +2253,7 @@ export function lockRepairButton() {
  */
 export function unlockRepairButton() {
   isRepairingInProgress = false;
-  const repairBtn = document.getElementById('repairAllBtn');
-  if (repairBtn) {
-    repairBtn.disabled = false;
-  }
+  updateButtonState('repairAll', false);
   if (window.DEBUG_MODE) console.log('[Repair Button] Unlocked - repair complete');
 }
 
@@ -2489,7 +2671,7 @@ function preloadVesselImage(vesselType) {
   vesselImagePreloadQueue.add(vesselType);
 
   const img = new Image();
-  const imageUrl = `https://shippingmanager.cc/images/acquirevessels/${vesselType}`;
+  const imageUrl = `/api/vessel-image/${vesselType}`;
 
   img.onload = () => {
     vesselImageCache.set(vesselType, imageUrl);
@@ -2537,7 +2719,7 @@ function preloadCommonVesselImages() {
 function createVesselCard(vessel) {
   const selectedItem = selectedVessels.find(v => v.vessel.id === vessel.id);
   const isSelected = !!selectedItem;
-  const imageUrl = `https://shippingmanager.cc/images/acquirevessels/${vessel.type}`;
+  const imageUrl = `/api/vessel-image/${vessel.type}`;
 
   // Trigger preload for this vessel type if not already cached
   if (!vesselImageCache.has(vessel.type)) {
@@ -2570,7 +2752,7 @@ function createVesselCard(vessel) {
   }
 
   const card = document.createElement('div');
-  card.className = `vessel-card${isSelected ? ' selected' : ''}`;
+  card.className = 'vessel-card';
   card.innerHTML = `
     <div class="vessel-image-container">
       <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">

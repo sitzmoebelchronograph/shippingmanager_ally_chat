@@ -709,3 +709,25 @@ export function updatePageTitle(settings) {
   }
 
 }
+
+/**
+ * Detects if the current device is a mobile device based on screen width and user agent.
+ * Uses a combination of viewport width check and user agent parsing for reliability.
+ *
+ * @returns {boolean} - True if mobile device, false otherwise
+ * @example
+ * if (isMobileDevice()) {
+ *   console.log('Mobile layout active');
+ * }
+ */
+export function isMobileDevice() {
+  // Check viewport width (< 768px is considered mobile)
+  const isMobileWidth = window.innerWidth < 768;
+
+  // Check user agent for mobile devices
+  const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+
+  // Return true if either check indicates mobile
+  return isMobileWidth || isMobileUA;
+}

@@ -11,6 +11,7 @@
  */
 
 import { formatNumber, escapeHtml, showSideNotification } from './utils.js';
+import { updateBadge } from './badge-manager.js';
 
 /**
  * Fetches coop data from the backend API
@@ -47,25 +48,9 @@ export async function updateCoopBadge() {
       return;
     }
 
-    // Update button badge (green if >= 3, red if < 3)
-    const badge = document.getElementById('coopBadge');
-    if (badge) {
-      if (coop.available > 0) {
-        badge.textContent = coop.available;
-        badge.classList.remove('hidden');
-        // Green if >= 3, red if < 3
-        if (coop.available >= 3) {
-          badge.classList.add('badge-green-bg');
-          badge.classList.remove('badge-red-bg');
-        } else {
-          badge.classList.add('badge-red-bg');
-          badge.classList.remove('badge-green-bg');
-        }
-      } else {
-        // Hide badge when 0 available
-        badge.classList.add('hidden');
-      }
-    }
+    // Update button badge using badge-manager (green if >= 3, red if < 3)
+    const color = coop.available >= 3 ? 'GREEN' : 'RED';
+    updateBadge('coopBadge', coop.available, coop.available > 0, color);
 
     // Header display is handled by badge only - no separate display needed
   } catch (error) {

@@ -4,7 +4,7 @@ A comprehensive "Addon" for the beloved game [Shipping Manager](https://shipping
 
 ## Key Features at a Glance
 
-* **Harbor Map**: Interactive world map with live fleet tracking, vessel/port details, and route visualization
+* **Harbor Map**: Interactive world map with live fleet tracking, vessel/port details, route visualization, **and maritime POI (museums, shipwrecks)**
 * **Logbook**: Comprehensive event tracking for alliance activities, vessel operations, and game history
 * **AutoPilot System**: Intelligent automation for fuel/CO2 purchasing, vessel operations, and more
 * **Mobile Support**: As a Steam player, you can now receive **mobile notifications** via your Wi-Fi at home
@@ -165,6 +165,20 @@ Interactive world map visualization of your fleet, ports, and routes:
   - Active routes drawn as lines on map
   - Color-coded by vessel status
   - Hover routes to see vessel details
+  - Route filter with LocalStorage persistence (remembers your last selection)
+- **Points of Interest (POI)**:
+  - **Maritime Museums**: Toggle display of maritime museums worldwide (🏛️ button)
+  - **Historic Shipwrecks**: Toggle display of documented shipwreck locations (⚓ button)
+  - Real-time POI data from OpenStreetMap via cached API
+  - Detailed tooltips with names, coordinates, and additional information
+  - POI visibility persists across sessions
+  - Automatic cache refresh every 24 hours
+- **Map Themes**:
+  - Standard light theme (default map view)
+  - Dark mode with optimized controls and tooltips
+  - **Satellite imagery** with transparent controls and adapted UI
+  - Weather radar overlay (rain visualization)
+  - All themes with optimized control styling and readability
 - **Vessel Detail Panel** (draggable):
   - Complete vessel specifications (capacity, range, speed, fuel, CO2)
   - Current position and status
@@ -182,10 +196,12 @@ Interactive world map visualization of your fleet, ports, and routes:
   - Duration calculation
   - Demand-based route optimization
 - **Map Controls**:
-  - Weather radar toggle (visual effects)
-  - Theme switching (dark/light map styles)
-  - Zoom and pan controls
+  - Horizontal zoom controls with individually rounded buttons
+  - Weather radar toggle with visual strike-through indicator when disabled
+  - Theme switching (Standard/Dark/Satellite)
+  - POI layer toggles (Museums/Wrecks)
   - Mobile swipe support
+  - Zoom level display (bottom-left corner)
 - **Panel Management**:
   - Drag panels to reposition
   - Close panels independently
@@ -384,12 +400,27 @@ Automated assistant for alliance communication and scheduled announcements:
 - Automatically accepts and pays when price is acceptable
 - Real-time negotiation notifications show progress
 
-### HTTPS Support
-- Self-signed certificates with automatic generation (can be replaced with your own certificates)
-- Automatic certificate installation to OS certificate store on first start (may require user confirmation)
-- Network IP addresses included in certificate
-- Accessible from all devices on local network
-- CA certificate download in settings for mobile devices
+### HTTPS Support & Certificate Management
+
+- **Automated Certificate Management**:
+  - Self-signed certificates with automatic generation via dedicated `certificate_manager.py` module
+  - **Automatic certificate installation** to OS certificate store on first start (may require user confirmation)
+  - **Smart certificate renewal**: Automatically regenerates certificates when network configuration changes
+  - **Multi-host support**: Certificates include all network IP addresses (localhost + LAN IPs) in Subject Alternative Names
+  - **Cross-platform compatibility**: Works on Windows, macOS, and Linux
+- **Network Access**:
+  - Accessible from all devices on local network (https://your-local-ip:12345)
+  - **Mobile device setup**: CA certificate download available in settings for manual installation on phones/tablets
+  - **QR Code**: Settings page provides QR code for easy mobile access
+- **Certificate Details**:
+  - Valid for 365 days from generation
+  - Automatically includes all network interfaces (WiFi, Ethernet, VPN)
+  - Can be replaced with your own certificates if needed
+  - Stored in `certs/` directory (localhost.pem + localhost-key.pem)
+- **Security Notes**:
+  - Self-signed certificates will show browser warnings on first visit (this is normal)
+  - Certificate trust is automatically established during installation
+  - All communication encrypted with TLS 1.2+
 
 ***
 

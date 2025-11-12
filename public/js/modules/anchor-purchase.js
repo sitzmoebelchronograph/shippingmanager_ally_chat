@@ -15,8 +15,9 @@ export async function showAnchorPurchaseDialog() {
   const feed = document.getElementById('anchorPurchaseFeed');
   const closeBtn = document.getElementById('closeAnchorPurchaseBtn');
 
-  const anchorBadge = document.getElementById('anchorCount');
-  const vesselsAtAnchor = parseInt(anchorBadge.textContent) || 0;
+  // Get anchor count from map icon badge
+  const anchorBadge = document.querySelector('.map-icon-item[data-action="anchor"] .map-icon-badge');
+  const vesselsAtAnchor = anchorBadge ? (parseInt(anchorBadge.textContent) || 0) : 0;
 
   // Show overlay
   overlay.classList.remove('hidden');

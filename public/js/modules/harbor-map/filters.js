@@ -41,9 +41,9 @@ export function filterVessels(vessels, filterType) {
       return arrivingSoon;
 
     case 'arrived_vessels':
-      // Vessels that have arrived at port (status: 'port')
-      const arrivedVessels = vessels.filter(v => v.status === 'port');
-      console.log(`[Filter] Found ${arrivedVessels.length} arrived vessels`);
+      // Vessels that have arrived at port (status: 'port') and are ready to depart (not parked)
+      const arrivedVessels = vessels.filter(v => v.status === 'port' && !v.is_parked);
+      console.log(`[Filter] Found ${arrivedVessels.length} arrived vessels (excluding parked)`);
       return arrivedVessels;
 
     case 'anchored_vessels':
@@ -59,9 +59,9 @@ export function filterVessels(vessels, filterType) {
       return drydockVessels;
 
     case 'vessels_in_delivery':
-      // Vessels being delivered (status: 'delivery')
-      const deliveryVessels = vessels.filter(v => v.status === 'delivery');
-      console.log(`[Filter] Found ${deliveryVessels.length} vessels in delivery`);
+      // Vessels being delivered (status: 'delivery' or 'pending')
+      const deliveryVessels = vessels.filter(v => v.status === 'delivery' || v.status === 'pending');
+      console.log(`[Filter] Found ${deliveryVessels.length} vessels in delivery (delivery + pending)`);
       return deliveryVessels;
 
     case 'tanker_only':

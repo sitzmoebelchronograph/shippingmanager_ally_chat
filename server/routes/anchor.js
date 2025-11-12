@@ -82,6 +82,18 @@ router.post('/anchor/purchase', express.json(), async (req, res) => {
     }
 
     logger.debug(`[${new Date().toISOString()}] [Anchor] Purchase request: amount=${amount}`);
+
+    // Fetch price before purchase for audit log
+    const priceData = await apiCall('/anchor-point/get-anchor-price', 'POST', {});
+
+    // Validate price data - FAIL LOUD if missing
+    if (!priceData.data || priceData.data.price === undefined || priceData.data.price === null) {
+      throw new Error('API response missing anchor price data');
+    }
+
+    const price = priceData.data.price;
+    const totalCost = price * amount;
+
     const purchaseData = await apiCall('/anchor-point/purchase-anchor-points', 'POST', { amount });
 
     if (purchaseData.error) {
@@ -103,6 +115,22 @@ router.post('/anchor/purchase', express.json(), async (req, res) => {
     // Fetch updated settings to get anchor_next_build timestamp and broadcast updates
     const userId = getUserId();
     if (userId) {
+      // AUDIT LOG: Manual anchor point purchase
+      const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+      await auditLog(
+        userId,
+        CATEGORIES.ANCHOR,
+        'Manual Anchor Purchase',
+        `Purchased ${amount} anchor point(s) for ${formatCurrency(totalCost)}`,
+        {
+          amount: amount,
+          price_per_anchor: price,
+          total_cost: totalCost,
+          duration: priceData.data.duration
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
       try {
         const settingsData = await apiCall('/user/get-user-settings', 'POST', {});
         const anchorNextBuild = settingsData.data?.anchor_next_build;

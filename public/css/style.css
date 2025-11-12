@@ -34,19 +34,19 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 20px;
+    padding: 5px;
 }
 
 .container {
-    width: 100%;
-    max-width: 900px;
+    width: calc(100vw - 10px);
+    max-width: none;
     background: #252525;
     border-radius: 10px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
     display: flex;
     flex-direction: column;
-    height: 90vh;
-    max-height: 800px;
+    height: calc(100vh - 10px);
+    max-height: none;
 }
 
 /* Chat Area Wrapper (contains chat-feed, input-section, and harbor map overlay) */
@@ -61,7 +61,7 @@ body {
 /* Action Bar */
 .action-bar {
     background: #1f1f1f;
-    padding: 12px 20px;
+    padding: 6px 20px;
     border-bottom: 1px solid #404040;
     display: flex;
     justify-content: flex-end;
@@ -182,9 +182,9 @@ body {
 
 .action-badge-bottom-left {
     position: absolute;
-    bottom: -8px;
-    left: -8px;
-    background: #f59e0b;
+    bottom: -6px !important;
+    left: -4px !important;
+    background: #f59e0b !important;
     color: white;
     font-size: 10px;
     font-weight: 700;
@@ -203,10 +203,22 @@ body {
 .header {
     background: #2a2a2a;
     color: #ffffff;
-    padding: 0 0 5px 20px;
+    padding: 0 0 4px 20px;
     border-radius: 10px 10px 0 0;
-    border-bottom: 2px solid #404040;
+    border-bottom: 1px solid #404040;
     position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+}
+
+.header-top {
+    flex: 0 1 auto;
+    min-width: 0;
+    line-height: 1;
+    padding: 0;
+    margin: 0;
 }
 
 .header h1 {
@@ -215,6 +227,41 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    margin-bottom: 0;
+    line-height: 1;
+}
+
+.header-bunker-displays {
+    display: flex;
+    gap: 8px;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.header-bunker-btn {
+    position: relative;
+    overflow: hidden;
+    font-size: 11px;
+    padding: 4px 6px;
+    min-width: 120px;
+    white-space: nowrap;
+}
+
+.bunker-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0%;
+    background: transparent;
+    transition: width 0.3s ease, background 0.3s ease;
+    pointer-events: none;
+}
+
+.bunker-content {
+    position: relative;
+    z-index: 1;
+    white-space: nowrap;
 }
 
 .header-info-displays {
@@ -224,6 +271,8 @@ body {
     padding-left: 0;
     margin-top: 0;
     margin-bottom: 0;
+    margin-left: auto;
+    padding-right: 20px;
 }
 
 .header-icon {
@@ -1456,7 +1505,7 @@ button:active {
     position: fixed;
     top: 20px;
     right: 20px;
-    z-index: 2900;
+    z-index: 10000;
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1479,7 +1528,8 @@ button:active {
     max-height: calc(100vh - 40px);
     overflow-y: auto;
     position: relative;
-    max-width: 390px;
+    width: 250px;
+    max-width: 250px;
 }
 
 /* Alert notifications with megaphone icon and Got it button */
@@ -2209,14 +2259,21 @@ button:active {
 }
 
 .confirm-dialog-btn {
-    padding: 6px 14px;
+    padding: 8px 12px;
     border-radius: 6px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     border: none;
-    height: auto;
+    height: 36px;
+    flex: 1;
+    white-space: nowrap;
+    min-width: 110px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .confirm-dialog-btn.cancel {
@@ -2568,7 +2625,11 @@ button:active {
 
 .sell-vessel-status {
     color: #9ca3af;
-    font-size: 12px;
+    font-size: 14px;
+}
+
+.sell-vessel-status span {
+    font-size: 14px;
 }
 
 .vessel-sell-now-btn {
@@ -2973,9 +3034,9 @@ button:active {
 
 .vessel-specs {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 12px;
+    grid-template-columns: 1fr;
+    gap: 2px;
+    margin-bottom: -5px;
     font-size: 13px;
 }
 
@@ -3161,7 +3222,7 @@ button:active {
 
     /* Header - 2-row mobile layout */
     .header {
-        padding: 10px;
+        padding: 10px 10px 2px 10px;
     }
 
     .header-top {
@@ -3215,6 +3276,14 @@ button:active {
         width: 100% !important;
         justify-content: flex-start !important;
         align-items: center !important;
+        margin-left: 0 !important;
+        padding-right: 6px !important;
+        order: 10;
+    }
+
+    .header-top {
+        width: 100% !important;
+        order: 1;
     }
 
     .header-info-displays > div:not(#hijackedVesselsDisplay) {
@@ -3404,7 +3473,7 @@ button:active {
 
     /* Move close button 2px down on mobile and add spacing */
     .close-btn {
-        top: 5px !important;
+        top: 4px !important;
         padding: 0 6px !important;
     }
 
@@ -4772,7 +4841,7 @@ button:active {
 }
 
 #logbookFilterStatus {
-    width: 80px;
+    width: 95px;
 }
 
 #logbookFilterTime {
@@ -4819,9 +4888,35 @@ button:active {
 
 .logbook-export-group {
     margin-left: auto;
-    display: flex;
-    gap: 8px;
-    align-items: center;
+}
+
+/* Mobile responsive styles for logbook filters */
+@media (max-width: 768px) {
+    .logbook-filters {
+        padding: 8px 12px;
+        gap: 8px;
+    }
+
+    .logbook-filter-row {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .logbook-filter-row:first-child .logbook-filter-group:nth-child(4) {
+        flex-basis: 100%;
+        width: 100%;
+    }
+
+    .logbook-filter-search {
+        max-width: none;
+        flex: 1;
+        min-width: 0;
+    }
+
+    #logbookFilterStatus,
+    #logbookFilterTime {
+        min-width: 75px;
+    }
 }
 
 .logbook-export-dropdown {
@@ -4961,6 +5056,22 @@ button:active {
 
 .logbook-row.expanded {
     background: rgba(96, 165, 250, 0.05);
+}
+
+.logbook-row.logbook-income {
+    background: rgba(16, 185, 129, 0.04);
+}
+
+.logbook-row.logbook-income:hover {
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.logbook-row.logbook-expense {
+    background: rgba(239, 68, 68, 0.04);
+}
+
+.logbook-row.logbook-expense:hover {
+    background: rgba(239, 68, 68, 0.08);
 }
 
 .logbook-table td {
@@ -5200,6 +5311,26 @@ button:active {
     margin: 0 !important;
 }
 
+.leaflet-top.leaflet-left > .leaflet-control-forecast {
+    grid-row: 9;
+    margin: 0 !important;
+}
+
+.leaflet-top.leaflet-left > .leaflet-control-logbook {
+    grid-row: 10;
+    margin: 0 !important;
+}
+
+.leaflet-top.leaflet-left > .leaflet-control-docs {
+    grid-row: 11;
+    margin: 0 !important;
+}
+
+.leaflet-top.leaflet-left > .leaflet-control-settings-btn {
+    grid-row: 12;
+    margin: 0 !important;
+}
+
 /* Column 2: Filter dropdowns - arrange horizontally */
 .leaflet-top.leaflet-left > .leaflet-control-route-filter {
     grid-column: 2;
@@ -5342,4 +5473,132 @@ button:active {
 .leaflet-control-fullscreen button:hover,
 .leaflet-control-refresh button:hover {
     background: #f4f4f4;
+}
+
+/* ========================================
+   Map Icon Bar (Floating Action Icons)
+   ======================================== */
+
+/* Desktop: Vertical bar at right side, starting at top */
+.map-icon-bar {
+    position: absolute;
+    top: 0px;
+    right: 3px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0px;
+    pointer-events: auto;
+}
+
+/* Icon Item - just emojis, no buttons */
+.map-icon-item {
+    position: relative;
+    cursor: pointer;
+    font-size: 16px;
+    width: 24px;
+    height: 24px;
+    transition: transform 0.2s ease, filter 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.map-icon-item:hover {
+    transform: scale(1.2);
+    filter: brightness(1.3);
+}
+
+.map-icon-item:active {
+    transform: scale(0.9);
+}
+
+/* Badge Styles */
+.map-icon-badge {
+    position: absolute;
+    top: 1px;
+    right: -3px;
+    color: white;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 2px 4px 1px 4px;
+    border-radius: 8px;
+    min-width: 14px;
+    text-align: center;
+    border: 1px solid #1f1f1f;
+    pointer-events: none;
+    z-index: 1000;
+    line-height: 1;
+}
+
+.map-icon-badge-bottom-left {
+    position: absolute;
+    bottom: -2px !important;
+    left: -1px !important;
+    background: #f59e0b !important;
+    color: white;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 8px;
+    min-width: 14px;
+    text-align: center;
+    border: 1px solid #1f1f1f;
+    pointer-events: none;
+}
+
+/* Plus/Minus signs for vessel buy/sell */
+.map-icon-plus {
+    position: absolute;
+    bottom: -10px;
+    left: 0px;
+    color: #10b981;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.map-icon-minus {
+    position: absolute;
+    bottom: -10px;
+    left: 0px;
+    color: #ef4444;
+    font-size: 20px;
+    font-weight: bold;
+    line-height: 1;
+    pointer-events: none;
+}
+
+/* Badge Color Variants */
+.map-badge-red {
+    background: #ef4444;
+}
+
+.map-badge-orange {
+    background: #f59e0b;
+}
+
+.map-badge-blue {
+    background: #3b82f6;
+}
+
+/* Hide icon bar when overlay is open */
+.overlay:not(.hidden) ~ .chat-area-wrapper .map-icon-bar {
+    display: none;
+}
+
+/* Mobile: Larger icon size and offset from top */
+@media (max-width: 768px) {
+    .map-icon-bar {
+        top: 21px;
+    }
+
+    .map-icon-item {
+        font-size: 18px;
+        width: 26px;
+        height: 26px;
+    }
 }

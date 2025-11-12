@@ -12,7 +12,7 @@ const state = require('../state');
 const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
 const config = require('../config');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const DEBUG_MODE = config.DEBUG_MODE;
 
@@ -132,16 +132,18 @@ async function autoRepairVessels(autopilotPaused, broadcastToUser, tryUpdateAllD
       }
 
       // Log to autopilot logbook
-      await logAutopilotAction(
+      await auditLog(
         userId,
+        CATEGORIES.VESSEL,
         'Auto-Repair',
-        'SUCCESS',
-        `${result.count} vessels | -$${costData.totalCost.toLocaleString()}`,
+        `${result.count} vessels | -${formatCurrency(costData.totalCost)}`,
         {
           vesselCount: result.count,
           totalCost: costData.totalCost,
           repairedVessels: vesselList
-        }
+        },
+        'SUCCESS',
+        SOURCES.AUTOPILOT
       );
 
       // Update all data to refresh repair badge count
@@ -159,15 +161,17 @@ async function autoRepairVessels(autopilotPaused, broadcastToUser, tryUpdateAllD
     logger.error('[Auto-Repair] Error:', error.message);
 
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.VESSEL,
       'Auto-Repair',
-      'ERROR',
       `Repair failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }

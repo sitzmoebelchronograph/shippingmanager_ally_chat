@@ -12,9 +12,15 @@ const state = require('../state');
 const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
 const config = require('../config');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 
 const DEBUG_MODE = config.DEBUG_MODE;
+
+/**
+ * Lock to prevent concurrent vessel departure operations.
+ * Prevents race conditions when autopilot loop and event-driven triggers run simultaneously.
+ */
+let isDepartInProgress = false;
 
 /**
  * Calculates remaining demand at a port.
@@ -72,6 +78,20 @@ function getTotalCapacity(vessel) {
  * @returns {Promise<Object>} Result object: { success: boolean, reason?: string, error?: string }
  */
 async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebuyAll, tryUpdateAllData) {
+  // LOCK: Prevent concurrent departure operations (race condition protection)
+  if (isDepartInProgress) {
+    logger.debug('[Depart] SKIPPED - Another departure operation is already in progress');
+    return {
+      success: false,
+      reason: 'depart_in_progress',
+      departedCount: 0
+    };
+  }
+
+  // Set lock
+  isDepartInProgress = true;
+  logger.debug('[Depart] Lock acquired');
+
   try {
     const settings = state.getSettings(userId);
 
@@ -114,19 +134,6 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
     }
 
     logger.debug(`[Depart] Found ${harbourVessels.length} vessels to process (total: ${allVessels.length})`);
-
-    // Broadcast vessel count to all clients (use consistent format)
-    if (broadcastToUser) {
-      const readyToDepart = allVessels.filter(v => v.status === 'port').length;
-      const atAnchor = allVessels.filter(v => v.status === 'anchor').length;
-      const pending = allVessels.filter(v => v.status === 'pending').length;
-
-      broadcastToUser(userId, 'vessel_count_update', {
-        readyToDepart,
-        atAnchor,
-        pending
-      });
-    }
 
     if (harbourVessels.length === 0) {
       logger.debug('[Depart] No vessels to depart, skipping');
@@ -207,15 +214,6 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
           name: vessel.name,
           destination: 'Unknown',
           reason: 'No route assigned'
-        });
-        continue;
-      }
-      if (vessel.delivery_price !== null && vessel.delivery_price > 0) {
-        logger.debug(`[Depart] Skipping ${vessel.name}: delivery contract active ($${vessel.delivery_price})`);
-        failedVessels.push({
-          name: vessel.name,
-          destination: vessel.route_destination || 'Unknown',
-          reason: 'Delivery contract active'
         });
         continue;
       }
@@ -494,6 +492,23 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
     if (processedCount > 0) {
       await autoRebuyAll();
       await tryUpdateAllData();
+
+      // CRITICAL: Broadcast updated vessel counts after departure
+      // This ensures badge updates even if tryUpdateAllData() was locked
+      if (broadcastToUser) {
+        const updatedVessels = await gameapi.fetchVessels();
+        const readyToDepart = updatedVessels.filter(v => v.status === 'port' && !v.is_parked).length;
+        const atAnchor = updatedVessels.filter(v => v.status === 'anchor').length;
+        const pending = updatedVessels.filter(v => v.status === 'pending').length;
+
+        broadcastToUser(userId, 'vessel_count_update', {
+          readyToDepart,
+          atAnchor,
+          pending
+        });
+
+        logger.debug(`[Depart] Vessel count broadcast: ${readyToDepart} ready, ${atAnchor} anchor, ${pending} pending`);
+      }
     }
 
     // Calculate totals from ALL departed vessels (not just last batch)
@@ -520,6 +535,10 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
   } catch (error) {
     logger.error('[Depart] Error:', error.message);
     return { success: false, reason: 'error', error: error.message };
+  } finally {
+    // ALWAYS release lock, even if error occurred
+    isDepartInProgress = false;
+    logger.debug('[Depart] Lock released');
   }
 }
 
@@ -559,11 +578,11 @@ async function autoDepartVessels(autopilotPaused, broadcastToUser, autoRebuyAll,
 
     // Log success to autopilot logbook
     if (result.success && result.reason !== 'no_vessels' && result.departedCount > 0) {
-      await logAutopilotAction(
+      await auditLog(
         userId,
+        CATEGORIES.VESSEL,
         'Auto-Depart',
-        'SUCCESS',
-        `${result.departedCount} vessels | +$${result.totalRevenue.toLocaleString()}`,
+        `${result.departedCount} vessels | +${formatCurrency(result.totalRevenue)}`,
         {
           vesselCount: result.departedCount,
           totalRevenue: result.totalRevenue,
@@ -571,52 +590,60 @@ async function autoDepartVessels(autopilotPaused, broadcastToUser, autoRebuyAll,
           totalCO2Used: result.totalCO2Used,
           totalHarborFees: result.totalHarborFees,
           departedVessels: result.departedVessels
-        }
+        },
+        'SUCCESS',
+        SOURCES.AUTOPILOT
       );
     }
 
     // Log warnings if any vessels had $0 revenue
     if (result.success && result.warningCount > 0) {
-      await logAutopilotAction(
+      await auditLog(
         userId,
+        CATEGORIES.VESSEL,
         'Auto-Depart',
-        'WARNING',
         `${result.warningCount} vessel${result.warningCount > 1 ? 's' : ''} with demand exhausted | $0 revenue`,
         {
           vesselCount: result.warningCount,
           warningVessels: result.warningVessels
-        }
+        },
+        'WARNING',
+        SOURCES.AUTOPILOT
       );
     }
 
     // Log warnings if any vessels had excessive harbor fees
     if (result.success && result.highFeeCount > 0) {
       const totalHarborFees = result.highFeeVessels.reduce((sum, v) => sum + (v.harborFee || 0), 0);
-      await logAutopilotAction(
+      await auditLog(
         userId,
+        CATEGORIES.VESSEL,
         'Auto-Depart',
-        'WARNING',
-        `${result.highFeeCount} vessel${result.highFeeCount > 1 ? 's' : ''} with excessive harbor fees | $${totalHarborFees.toLocaleString()} fees`,
+        `${result.highFeeCount} vessel${result.highFeeCount > 1 ? 's' : ''} with excessive harbor fees | ${formatCurrency(totalHarborFees)} fees`,
         {
           vesselCount: result.highFeeCount,
           totalHarborFees: totalHarborFees,
           highFeeVessels: result.highFeeVessels
-        }
+        },
+        'WARNING',
+        SOURCES.AUTOPILOT
       );
     }
   } catch (error) {
     logger.error('[Auto-Depart] Error:', error.message);
 
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.VESSEL,
       'Auto-Depart',
-      'ERROR',
       `Departure failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }

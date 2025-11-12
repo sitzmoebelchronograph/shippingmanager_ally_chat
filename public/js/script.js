@@ -264,6 +264,9 @@ import {
 // Import harbor map initialization
 import { initHarborMap, openHarborMap, preloadHarborMapData, startHarborMapAutoUpdate } from './modules/harbor-map-init.js';
 
+// Import badge manager for centralized badge updates
+import { updateBadge, updateButtonState, updateButtonTooltip, updateButtonVisibility, BADGE_COLORS } from './modules/badge-manager.js';
+
 // =============================================================================
 // Global State and DOM Element References
 // =============================================================================
@@ -403,118 +406,86 @@ function loadCache() {
     if (data.vessels) {
       const { readyToDepart, atAnchor, pending } = data.vessels;
 
-      // Ready to depart badge
-      const vesselCountBadge = document.getElementById('vesselCount');
-      if (vesselCountBadge && readyToDepart !== undefined) {
-        vesselCountBadge.textContent = readyToDepart;
-        if (readyToDepart > 0) {
-          vesselCountBadge.classList.remove('hidden');
-        } else {
-          vesselCountBadge.classList.add('hidden');
-        }
+      // Ready to depart badge and button
+      if (readyToDepart !== undefined) {
+        updateBadge('vesselCount', readyToDepart, readyToDepart > 0, 'BLUE');
+        updateButtonState('departAll', readyToDepart === 0);
+        updateButtonTooltip('departAll',
+          readyToDepart > 0
+            ? `Depart all ${readyToDepart} vessel${readyToDepart === 1 ? '' : 's'} from harbor`
+            : 'No vessels ready to depart'
+        );
       }
 
-      // Depart button state
-      const departBtn = document.getElementById('departAllBtn');
-      if (departBtn && readyToDepart !== undefined) {
-        if (readyToDepart > 0) {
-          departBtn.disabled = false;
-          departBtn.title = `Depart all ${readyToDepart} vessel${readyToDepart === 1 ? '' : 's'} from harbor`;
-        } else {
-          departBtn.disabled = true;
-          departBtn.title = 'No vessels ready to depart';
-        }
+      // Anchor badge and button
+      if (atAnchor !== undefined) {
+        updateBadge('anchorCount', atAnchor, atAnchor > 0, 'RED');
+        updateButtonTooltip('anchor',
+          atAnchor > 0
+            ? `${atAnchor} vessel${atAnchor === 1 ? '' : 's'} at anchor - Click to purchase anchor points`
+            : 'Purchase anchor points'
+        );
       }
 
-      // Anchor badge
-      const anchorCountBadge = document.getElementById('anchorCount');
-      if (anchorCountBadge && atAnchor !== undefined) {
-        anchorCountBadge.textContent = atAnchor;
-        if (atAnchor > 0) {
-          anchorCountBadge.classList.remove('hidden');
-        } else {
-          anchorCountBadge.classList.add('hidden');
-        }
-      }
+      // Pending vessels badge and button
+      if (pending !== undefined) {
+        updateBadge('pendingVesselsBadge', pending, pending > 0, 'ORANGE');
+        updateButtonTooltip('buyVessels', pending > 0 ? `Vessels in delivery: ${pending}` : 'Buy vessels');
 
-      // Anchor button - always enabled for purchasing anchor points
-      const anchorBtn = document.getElementById('anchorBtn');
-      if (anchorBtn && atAnchor !== undefined) {
-        if (atAnchor > 0) {
-          anchorBtn.title = `${atAnchor} vessel${atAnchor === 1 ? '' : 's'} at anchor - Click to purchase anchor points`;
-        } else {
-          anchorBtn.title = 'Purchase anchor points';
-        }
-      }
-
-      // Pending badge and button
-      const pendingBadge = document.getElementById('pendingVesselsBadge');
-      if (pendingBadge && pending !== undefined) {
-        pendingBadge.textContent = pending;
-        if (pending > 0) {
-          pendingBadge.classList.remove('hidden');
-        } else {
-          pendingBadge.classList.add('hidden');
-        }
-
-        // Update buyVesselsBtn tooltip to show pending count
-        const buyVesselsBtn = document.getElementById('buyVesselsBtn');
-        if (buyVesselsBtn) {
-          buyVesselsBtn.title = pending > 0 ? `Vessels in delivery: ${pending}` : 'Buy vessels';
-        }
-      }
-
-      const pendingBtn = document.getElementById('filterPendingBtn');
-      const pendingCountSpan = document.getElementById('pendingCount');
-      if (pendingBtn && pendingCountSpan && pending !== undefined) {
-        pendingCountSpan.textContent = pending;
-        if (pending > 0) {
-          pendingBtn.classList.remove('hidden');
-        } else {
-          pendingBtn.classList.add('hidden');
+        // Update pending filter button in overlay (if exists)
+        const pendingBtn = document.getElementById('filterPendingBtn');
+        const pendingCountSpan = document.getElementById('pendingCount');
+        if (pendingBtn && pendingCountSpan) {
+          pendingCountSpan.textContent = pending;
+          if (pending > 0) {
+            pendingBtn.classList.remove('hidden');
+          } else {
+            pendingBtn.classList.add('hidden');
+          }
         }
       }
     }
 
     // Repair badge and button state
-    if (data.repair !== undefined) {
-      const repairBadge = document.getElementById('repairCount');
-      if (repairBadge) {
-        repairBadge.textContent = data.repair;
-        // Remove any color classes that might have been accidentally added
-        repairBadge.classList.remove('badge-green-bg', 'badge-orange-bg', 'badge-red-bg');
-        if (data.repair > 0) {
-          repairBadge.classList.remove('hidden');
-        } else {
-          repairBadge.classList.add('hidden');
-        }
+    if (data.repair) {
+      const { count } = data.repair;
+      if (count !== undefined) {
+        updateBadge('repairCount', count, count > 0, 'RED');
       }
+    }
 
-      const repairBtn = document.getElementById('repairAllBtn');
-      if (repairBtn) {
-        if (data.repair > 0) {
-          repairBtn.disabled = false;
-          repairBtn.title = `Repair ${data.repair} vessel${data.repair === 1 ? '' : 's'} with high wear`;
-        } else {
-          repairBtn.disabled = true;
-          repairBtn.title = 'No vessels need repair';
-        }
+    // Drydock badge
+    if (data.drydock) {
+      const { count } = data.drydock;
+      if (count !== undefined) {
+        updateBadge('drydockCount', count, count > 0, 'ORANGE');
       }
+    }
+
+    // Update repair button state (enabled if repair OR drydock count > 0)
+    if (data.repair || data.drydock) {
+      const repairCount = data.repair?.count ?? 0;
+      const drydockCount = data.drydock?.count ?? 0;
+      const hasRepairOrDrydock = repairCount > 0 || drydockCount > 0;
+      updateButtonState('repairAll', !hasRepairOrDrydock);
+
+      let tooltip;
+      if (repairCount > 0 && drydockCount > 0) {
+        tooltip = `Repair ${repairCount} vessel${repairCount === 1 ? '' : 's'} or drydock ${drydockCount} vessel${drydockCount === 1 ? '' : 's'}`;
+      } else if (repairCount > 0) {
+        tooltip = `Repair ${repairCount} vessel${repairCount === 1 ? '' : 's'} with high wear`;
+      } else if (drydockCount > 0) {
+        tooltip = `Drydock ${drydockCount} vessel${drydockCount === 1 ? '' : 's'}`;
+      } else {
+        tooltip = 'No vessels need repair or drydock';
+      }
+      updateButtonTooltip('repairAll', tooltip);
     }
 
     // Campaigns badge
     if (data.campaigns !== undefined) {
-      const campaignsBadge = document.getElementById('campaignsCount');
-      if (campaignsBadge) {
-        campaignsBadge.textContent = data.campaigns;
-        // Only show badge if < 3 campaigns
-        if (data.campaigns < 3) {
-          campaignsBadge.classList.remove('hidden');
-        } else {
-          campaignsBadge.classList.add('hidden');
-        }
-        campaignsBadge.classList.add('badge-red-bg');
-      }
+      // Only show badge if < 3 campaigns
+      updateBadge('campaignsCount', data.campaigns, data.campaigns < 3, 'RED');
 
       // Update header display
       const campaignsHeaderDisplay = document.getElementById('campaignsHeaderDisplay');
@@ -631,12 +602,14 @@ function loadCache() {
       if (coopBtn) {
         coopBtn.style.display = '';
       }
+      updateButtonVisibility('coop', true);
 
-      // Show Alliance Chat button in action menu
+      // Show Alliance Chat button in action menu and icon bar
       const allianceChatBtn = document.getElementById('allianceChatBtn');
       if (allianceChatBtn) {
         allianceChatBtn.style.display = '';
       }
+      updateButtonVisibility('allianceChat', true);
 
       // Only show if cap > 0 (user in alliance)
       if (cap > 0) {
@@ -666,6 +639,7 @@ function loadCache() {
       if (fuelDisplay && fuel !== undefined && maxFuel !== undefined && (maxFuel > 0 || fuel <= 0)) {
         const maxFuelText = maxFuel > 0 ? Math.floor(maxFuel).toLocaleString('en-US') : '--';
         fuelDisplay.innerHTML = `${Math.floor(fuel).toLocaleString('en-US')} <b>t</b> <b>/</b> ${maxFuelText} <b>t</b>`;
+
 
         // Update fill bar and button styling with CSS classes
         if (fuelFill && fuelBtn) {
@@ -727,6 +701,7 @@ function loadCache() {
         const co2Value = co2 < 0 ? `-${Math.floor(Math.abs(co2)).toLocaleString('en-US')}` : Math.floor(co2).toLocaleString('en-US');
         const maxCO2Text = maxCO2 > 0 ? Math.floor(maxCO2).toLocaleString('en-US') : '--';
         co2Display.innerHTML = `${co2Value} <b>t</b> <b>/</b> ${maxCO2Text} <b>t</b>`;
+
 
         // Update fill bar and button styling with CSS classes
         if (co2Fill && co2Btn) {
@@ -816,16 +791,18 @@ function loadCache() {
         coopContainer.classList.remove('hidden');
       }
 
-      // Show COOP button in action menu
+      // Show COOP button in action menu and icon bar
       if (coopBtn) {
         coopBtn.style.display = '';
       }
+      updateButtonVisibility('coop', true);
 
-      // Show Alliance Chat button in action menu
+      // Show Alliance Chat button in action menu and icon bar
       const allianceChatBtn = document.getElementById('allianceChatBtn');
       if (allianceChatBtn) {
         allianceChatBtn.style.display = '';
       }
+      updateButtonVisibility('allianceChat', true);
 
       // Update COOP badge (green if >= 3, red if < 3)
       const coopBadge = document.getElementById('coopBadge');
@@ -858,12 +835,14 @@ function loadCache() {
       if (coopBtn) {
         coopBtn.style.display = 'none';
       }
+      updateButtonVisibility('coop', false);
 
       // Hide Alliance Chat button if not in alliance
       const allianceChatBtn = document.getElementById('allianceChatBtn');
       if (allianceChatBtn) {
         allianceChatBtn.style.display = 'none';
       }
+      updateButtonVisibility('allianceChat', false);
     }
 
     // Stock & Anchor
@@ -1105,6 +1084,7 @@ window.debouncedUpdateRepairCount = debouncedUpdateRepairCount;
 window.updateVesselCount = updateVesselCount;
 window.lockDepartButton = lockDepartButton;
 window.unlockDepartButton = unlockDepartButton;
+window.openRepairAndDrydockDialog = openRepairAndDrydockDialog;
 
 /**
  * Expose settings getter for automation module.
@@ -1632,6 +1612,31 @@ window.updateHijackingBadge = updateHijackingBadge;
  */
 window.updateHijackedVesselsDisplay = updateHijackedVesselsDisplay;
 
+/**
+ * Expose functions for map icon bar to call directly
+ * These are used by map-icon-bar.js to handle icon clicks
+ * @global
+ */
+window.departAllVessels = departAllVessels;
+window.showAnchorInfo = showAnchorInfo;
+window.showAllChats = showAllChats;
+window.openHijackingInbox = openHijackingInbox;
+window.showContactList = showContactList;
+window.showCampaignsOverlay = showCampaignsOverlay;
+window.showCoopOverlay = showCoopOverlay;
+window.openSellVesselsOverlay = openSellVesselsOverlay;
+window.showSettings = showSettings;
+
+/**
+ * Wrapper function for logbook overlay (icon bar action)
+ */
+window.showLogbookOverlay = function() {
+  // Call openLogbook function exposed by logbook module
+  if (window.openLogbook) {
+    window.openLogbook();
+  }
+};
+
 // =============================================================================
 // DOMContentLoaded - Main Application Initialization
 // =============================================================================
@@ -1699,6 +1704,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ===== STEP 1: Load Settings =====
   // CRITICAL: Must happen first as other modules depend on settings state
   settings = await loadSettings();
+
+  // Expose settings globally for modules that need access (e.g., map-icon-bar, vessel-panel)
+  window.settings = settings;
 
   // Set global DEBUG_MODE from server settings (controlled by systray Debug Mode toggle)
   if (settings.debugMode !== undefined) {
@@ -2134,8 +2142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('deleteChatBtn').addEventListener('click', deleteCurrentChat);
 
   // --- Hijacking Inbox Event Listeners ---
-  // Open Blackbeard's Phone Booth
-  document.getElementById('hijackingBtn').addEventListener('click', openHijackingInbox);
+  // Hijacking button is now on map icon bar (calls window.openHijackingInbox)
 
   // Close hijacking inbox overlay
   document.getElementById('closeHijackingBtn').addEventListener('click', closeHijackingInbox);
@@ -2180,25 +2187,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('closeChatSelectionBtn').addEventListener('click', closeChatSelection);
 
   // --- All Chats Overview Event Listeners ---
-  // Open all chats list
-  document.getElementById('allChatsBtn').addEventListener('click', showAllChats);
+  // All chats button is now on map icon bar (calls window.showAllChats)
 
   // Close all chats list
   document.getElementById('closeAllChatsBtn').addEventListener('click', closeAllChats);
 
   // --- Contact List Event Listeners ---
-  // Open contact list overlay
-  document.getElementById('contactListBtn').addEventListener('click', showContactList);
+  // Contact list button is now on map icon bar (calls window.showContactList)
 
   // Close contact list overlay
   document.getElementById('closeContactListBtn').addEventListener('click', closeContactList);
 
   // --- Settings and Dialogs Event Listeners ---
 
-  // Open settings dialog
-  document.getElementById('settingsBtn').addEventListener('click', () => {
+  // Settings button is now on map icon bar (calls window.showSettings)
+  window.showSettings = () => {
     showSettings(settings);
-  });
+  };
 
   // Close settings dialog
   document.getElementById('closeSettingsBtn').addEventListener('click', closeSettings);
@@ -2225,8 +2230,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Open alliance chat overlay
-  document.getElementById('allianceChatBtn').addEventListener('click', () => {
+  // Alliance chat button is now on map icon bar (calls window.showAllianceChatOverlay)
+  window.showAllianceChatOverlay = () => {
     const overlay = document.getElementById('allianceChatOverlay');
     if (overlay) {
       overlay.classList.remove('hidden');
@@ -2237,7 +2242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.loadMessages(chatFeed);
       }
     }
-  });
+  };
 
   // Close alliance chat overlay
   document.getElementById('closeChatBtn').addEventListener('click', async () => {
@@ -2252,19 +2257,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Open documentation in new tab
-  document.getElementById('docsBtn').addEventListener('click', () => {
+  // Documentation button is now on map icon bar (calls window.showDocsOverlay)
+  window.showDocsOverlay = () => {
     window.open('/docs/index.html', '_blank');
-  });
+  };
 
-  // Open campaigns overlay
-  document.getElementById('campaignsBtn').addEventListener('click', showCampaignsOverlay);
+  // Campaigns button is now on map icon bar (calls window.showCampaignsOverlay)
 
   // Close campaigns overlay
   document.getElementById('closeCampaignsBtn').addEventListener('click', closeCampaignsOverlay);
 
-  // Open forecast overlay
-  document.getElementById('forecastBtn').addEventListener('click', () => {
+  // Forecast button is now on map icon bar (calls window.showForecastOverlay)
+  window.showForecastOverlay = () => {
     document.getElementById('forecastOverlay').classList.remove('hidden');
 
     // Pass current event data to forecast calendar if available
@@ -2278,7 +2282,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     initForecastCalendar();
-  });
+  };
 
   // Close forecast overlay
   document.getElementById('closeForecastBtn').addEventListener('click', () => {
@@ -2297,8 +2301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('[Init] Failed to initialize harbor map:', error);
   });
 
-  // Open coop overlay
-  document.getElementById('coopBtn').addEventListener('click', showCoopOverlay);
+  // Coop button is now on map icon bar (calls window.showCoopOverlay)
 
   // Close coop overlay
   document.getElementById('closeCoopBtn').addEventListener('click', closeCoopOverlay);
@@ -2307,16 +2310,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('testAlertBtn').addEventListener('click', testBrowserNotification);
 
   // --- Vessel Catalog Event Listeners ---
-  // Open vessel catalog overlay and load available vessels for purchase
-  document.getElementById('buyVesselsBtn').addEventListener('click', async () => {
+  // Buy vessels button is now on map icon bar (calls window.showBuyVesselsOverlay)
+  window.showBuyVesselsOverlay = async () => {
     // Load current bunker data (including cash) before showing purchase dialog
     await updateBunkerStatus(settings);
     document.getElementById('buyVesselsOverlay').classList.remove('hidden');
     await loadAcquirableVessels();
-  });
+  };
 
-  // Open sell vessels overlay
-  document.getElementById('sellVesselsBtn').addEventListener('click', openSellVesselsOverlay);
+  // Sell vessels button is now on map icon bar (calls window.openSellVesselsOverlay)
 
   // Close sell vessels overlay
   document.getElementById('closeSellVesselsBtn').addEventListener('click', closeSellVesselsOverlay);
@@ -3214,14 +3216,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // --- Vessel Management Event Listeners ---
-  // Depart all ready vessels in harbor
-  document.getElementById('departAllBtn').addEventListener('click', departAllVessels);
-
-  // Show anchor info overlay (vessel status details)
-  document.getElementById('anchorBtn').addEventListener('click', showAnchorInfo);
-
-  // Open repair and drydock dialog (tabbed)
-  document.getElementById('repairAllBtn').addEventListener('click', () => openRepairAndDrydockDialog(settings));
+  // NOTE: Depart, anchor, and repair button clicks are now handled by map icon bar (map-icon-bar.js)
+  // Hidden buttons have been removed from index.html to eliminate duplicate UI elements
 
   // --- Bunker Management Event Listeners ---
   // Buy maximum fuel based on available storage

@@ -6,15 +6,24 @@
  * @module harbor-map/panel-drag
  */
 
+import { isMobileDevice } from '../utils.js';
+
 /**
  * Makes all detail panels draggable
  * Adds drag handles to panel headers and enables drag & drop
+ * Disabled on mobile devices
  *
  * @returns {void}
  * @example
  * initializePanelDrag();
  */
 export function initializePanelDrag() {
+  // Disable panel drag on mobile
+  if (isMobileDevice()) {
+    console.log('[Panel Drag] Disabled on mobile device');
+    return;
+  }
+
   const panels = document.querySelectorAll('.detail-panel');
 
   panels.forEach(panel => {
@@ -34,17 +43,27 @@ export function initializePanelDrag() {
     let panelHeight = 0;
     let panelOffsetTop = 0;
 
-    // Make entire panel draggable
-    panel.classList.add('drag-handle');
-    panel.style.cursor = 'move';
+    // Make header and image draggable (not entire panel)
+    const header = panel.querySelector('.panel-header');
+    const imageContainer = panel.querySelector('.vessel-image-container, .port-image-container');
+
+    if (header) {
+      header.classList.add('drag-handle');
+      header.style.cursor = 'move';
+    }
+    if (imageContainer) {
+      imageContainer.classList.add('drag-handle');
+      imageContainer.style.cursor = 'move';
+    }
 
     // Mouse events
     panel.addEventListener('mousedown', dragStart);
     document.addEventListener('mousemove', drag);
     document.addEventListener('mouseup', dragEnd);
 
-    // Double-click to reset position (anywhere on panel)
-    panel.addEventListener('dblclick', resetPosition);
+    // Double-click to reset position (only on header and image)
+    if (header) header.addEventListener('dblclick', resetPosition);
+    if (imageContainer) imageContainer.addEventListener('dblclick', resetPosition);
 
     // Touch events (passive where possible for better scroll performance)
     panel.addEventListener('touchstart', dragStart, { passive: true });
@@ -52,11 +71,17 @@ export function initializePanelDrag() {
     document.addEventListener('touchend', dragEnd, { passive: true });
 
     function dragStart(e) {
-      // Don't drag if clicking on interactive elements
       const target = e.target;
       const tagName = target.tagName.toLowerCase();
 
-      // Skip dragging for interactive elements
+      // Only allow drag from header or image container
+      const isDragHandle = target.closest('.panel-header') || target.closest('.vessel-image-container') || target.closest('.port-image-container');
+
+      if (!isDragHandle) {
+        return;
+      }
+
+      // Don't drag if clicking on interactive elements
       if (
         target.classList.contains('close-btn') ||
         tagName === 'button' ||
@@ -156,10 +181,17 @@ export function initializePanelDrag() {
     }
 
     function resetPosition(e) {
-      // Don't reset if clicking on interactive elements
       const target = e.target;
       const tagName = target.tagName.toLowerCase();
 
+      // Only allow reset from header or image container
+      const isDragHandle = target.closest('.panel-header') || target.closest('.vessel-image-container') || target.closest('.port-image-container');
+
+      if (!isDragHandle) {
+        return;
+      }
+
+      // Don't reset if clicking on interactive elements
       if (
         target.classList.contains('close-btn') ||
         tagName === 'button' ||

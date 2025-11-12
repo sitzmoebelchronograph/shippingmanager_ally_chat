@@ -33,6 +33,7 @@
 import { escapeHtml, showSideNotification, showNotification } from './utils.js';
 import { fetchMessengerChats, fetchMessengerMessages, sendPrivateMessage as apiSendPrivateMessage, deleteChat as apiDeleteChat, markChatAsRead as apiMarkChatAsRead, fetchContacts, searchUsers } from './api.js';
 import { showConfirmDialog } from './ui-dialogs.js';
+import { updateBadge } from './badge-manager.js';
 
 /**
  * Formats timestamp using browser locale without timezone.
@@ -545,12 +546,21 @@ async function displaySystemMessage(chat) {
 
         // Save updated history to server
         try {
-          // Preserve autopilot_resolved flag if it exists
-          const dataToSave = autopilotResolved ? {
-            history: negotiationHistory,
-            autopilot_resolved: true,
-            resolved_at: resolvedAt
-          } : { history: negotiationHistory };
+          // Preserve autopilot_resolved, resolved_at, and payment_verification if they exist
+          const dataToSave = {
+            history: negotiationHistory
+          };
+
+          // Always preserve these fields if they exist
+          if (autopilotResolved) {
+            dataToSave.autopilot_resolved = true;
+          }
+          if (resolvedAt) {
+            dataToSave.resolved_at = resolvedAt;
+          }
+          if (paymentVerification) {
+            dataToSave.payment_verification = paymentVerification;
+          }
 
           await fetch(`/api/hijacking/history/${chat.values.case_id}`, {
             method: 'POST',
@@ -564,13 +574,8 @@ async function displaySystemMessage(chat) {
         caseDetails.offers = negotiationHistory;
         caseDetails.payment_verification = paymentVerification;
 
-        // Start polling for active (unresolved) hijacking cases
-        // This ensures we get notifications when pirates respond
-        const isActive = caseDetails.paid_amount === null && caseDetails.status !== 'solved';
-        if (isActive) {
-          console.log(`[Hijacking] Starting polling for active case ${chat.values.case_id}`);
-          startHijackingPolling(chat.values.case_id);
-        }
+        // Polling removed - we now use 2-minute verification system after each offer
+        // No automatic polling to avoid unnecessary chat reloads
       }
     } catch (error) {
       console.error('Error fetching hijacking case:', error);
@@ -716,14 +721,29 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
 
       if (paymentVerification) {
         if (paymentVerification.verified) {
-          // Payment verified - show Blackbeard signature
-          verificationHTML = `
-            <div style="position: absolute; right: -8px; top: calc(35% + 50px); transform: translateY(-50%); text-align: right;">
-              <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
-                Blackbeard
+          // Payment verified - show Blackbeard signature ONLY if autopilot resolved
+          if (autopilotResolved) {
+            verificationHTML = `
+              <div style="position: absolute; right: -8px; top: calc(35% + 50px); transform: translateY(-50%); text-align: right;">
+                <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
+                  Blackbeard
+                </div>
               </div>
-            </div>
-          `;
+            `;
+          } else {
+            // User resolved manually - show verification details without Blackbeard signature
+            verificationHTML = `
+              <div style="margin-top: 12px; padding: 10px; background: rgba(16, 185, 129, 0.1); border: 2px solid #10b981; border-radius: 4px;">
+                <div style="color: #10b981; font-weight: bold; font-size: 14px; text-align: center;">✓ Payment Verified</div>
+                <div style="margin-top: 8px; font-size: 12px; color: #9ca3af;">
+                  Expected: <strong>$${paymentVerification.expected_amount.toLocaleString()}</strong><br>
+                  Paid: <strong>$${paymentVerification.actual_paid.toLocaleString()}</strong><br>
+                  Cash Before: $${paymentVerification.cash_before.toLocaleString()}<br>
+                  Cash After: $${paymentVerification.cash_after.toLocaleString()}
+                </div>
+              </div>
+            `;
+          }
         } else {
           // Payment NOT verified - show FAILED
           verificationHTML = `
@@ -739,7 +759,7 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
           `;
         }
       } else {
-        // No verification data (old case) - show Blackbeard signature as before
+        // No verification data (old case before verification system) - show Blackbeard signature as before
         verificationHTML = `
           <div style="position: absolute; right: -8px; top: calc(35% + 50px); transform: translateY(-50%); text-align: right;">
             <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
@@ -787,9 +807,9 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
           <div id="hijacking-negotiate-${caseId}" style="display: none; margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
             <div style="margin-bottom: 12px; font-weight: bold; text-align: center;">Choose your counter-offer:</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-              <button class="hijacking-offer-btn" data-case-id="${caseId}" data-percentage="0.01">
+              <button class="hijacking-offer-btn" data-case-id="${caseId}" data-fixed-amount="20000">
                 <div style="font-weight: bold; margin-bottom: 4px;">A Copper Jot</div>
-                <div style="font-size: 11px; opacity: 0.8;">$${Math.floor(requestedAmount * 0.01).toLocaleString()}</div>
+                <div style="font-size: 11px; opacity: 0.8;">$20,000</div>
               </button>
               <button class="hijacking-offer-btn" data-case-id="${caseId}" data-percentage="0.25">
                 <div style="font-weight: bold; margin-bottom: 4px;">A Tattered Patch</div>
@@ -807,9 +827,9 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
                 <div style="font-size: 11px; opacity: 0.8;">$${Math.floor(requestedAmount * 0.75).toLocaleString()}</div>
               </button>
             </div>
-            <div style="display: flex; gap: 8px; justify-content: center;">
-              <button class="btn-primary" onclick="window.proposeHijackingPrice(${caseId}, ${requestedAmount})" style="padding: 8px 16px; background: #3b82f6; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Propose Price</button>
-              <button class="btn-secondary" onclick="window.cancelNegotiate(${caseId})" style="padding: 8px 16px; background: #6b7280; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <button class="btn-primary" onclick="window.proposeHijackingPrice(${caseId}, ${requestedAmount})" style="padding: 8px 12px; background: #3b82f6; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Propose Price</button>
+              <button class="btn-secondary" onclick="window.cancelNegotiate(${caseId})" style="padding: 8px 12px; background: #6b7280; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
             </div>
           </div>
         `;
@@ -1167,10 +1187,10 @@ export async function updateUnreadBadge(retryCount = 0) {
     const previousCache = localStorage.getItem(cacheKey);
     const previousCount = previousCache ? JSON.parse(previousCache).messages || 0 : 0;
 
-    const badge = document.getElementById('unreadBadge');
+    // Update badge using badge-manager
+    updateBadge('unreadBadge', unreadCount, unreadCount > 0, 'RED');
+
     if (unreadCount > 0) {
-      badge.textContent = unreadCount;
-      badge.classList.remove('hidden');
 
       // Show browser notification if count increased and notifications are enabled
       if (unreadCount > previousCount && window.settings?.enableInboxNotifications) {
@@ -1210,8 +1230,6 @@ ${notificationBody}`,
           });
         }
       }
-    } else {
-      badge.classList.add('hidden');
     }
 
     // Save to cache for next page load
@@ -1519,8 +1537,8 @@ window.showNegotiateOptions = function(caseId) {
   const actionsDiv = document.getElementById(`hijacking-actions-${caseId}`);
   const negotiateDiv = document.getElementById(`hijacking-negotiate-${caseId}`);
 
-  if (actionsDiv) actionsDiv.classList.add('hidden');
-  if (negotiateDiv) negotiateDiv.classList.remove('hidden');
+  if (actionsDiv) actionsDiv.style.display = 'none';
+  if (negotiateDiv) negotiateDiv.style.display = 'block';
 };
 
 /**
@@ -1530,8 +1548,8 @@ window.cancelNegotiate = function(caseId) {
   const actionsDiv = document.getElementById(`hijacking-actions-${caseId}`);
   const negotiateDiv = document.getElementById(`hijacking-negotiate-${caseId}`);
 
-  if (actionsDiv) actionsDiv.classList.remove('hidden');
-  if (negotiateDiv) negotiateDiv.classList.add('hidden');
+  if (actionsDiv) actionsDiv.style.display = 'flex';
+  if (negotiateDiv) negotiateDiv.style.display = 'none';
 
   // Clear radio selection
   const radios = document.querySelectorAll(`input[name="hijacking-offer-${caseId}"]`);
@@ -1549,8 +1567,14 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
     return;
   }
 
-  const percentage = parseFloat(selectedButton.dataset.percentage);
-  const offerAmount = Math.floor(requestedAmount * percentage);
+  // Check if this is a fixed amount offer or percentage-based
+  let offerAmount;
+  if (selectedButton.dataset.fixedAmount) {
+    offerAmount = parseInt(selectedButton.dataset.fixedAmount);
+  } else {
+    const percentage = parseFloat(selectedButton.dataset.percentage);
+    offerAmount = Math.floor(requestedAmount * percentage);
+  }
 
   // Get offer name from button
   const offerName = selectedButton.querySelector('div:first-child').textContent;
@@ -1623,34 +1647,291 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
     }
 
     // Show success notification
-    showSideNotification(`Offer submitted, waiting for confirmation...`, 'info');
+    showSideNotification(`Offer submitted!`, 'success', 3000);
 
-    // Start polling immediately to detect API confirmation and pirate response
-    startHijackingPolling(caseId);
+    // Get counter-offer from API response (immediate, no waiting!)
+    const pirateCounterOffer = data.data?.requested_amount;
+    console.log('[Hijacking] Submit offer response:', data);
+    console.log('[Hijacking] Pirate counter-offer:', pirateCounterOffer);
 
-    // Hide negotiation options and show waiting status
-    const negotiateDiv = document.getElementById(`hijacking-negotiate-${caseId}`);
-    const actionsDiv = document.getElementById(`hijacking-actions-${caseId}`);
-
-    if (negotiateDiv) negotiateDiv.classList.add('hidden');
-    if (actionsDiv) {
-      // Show waiting status - Polling will update this automatically
-      actionsDiv.innerHTML = `
-        <div style="padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; text-align: center;">
-          <div style="font-size: 18px; font-weight: bold; margin-bottom: 8px;">⏳ Offer submitted</div>
-          <div style="font-size: 14px; color: #9ca3af; margin-bottom: 12px;">Waiting for pirates to respond...</div>
-          <div style="font-size: 12px; color: #6b7280;">You'll be notified when they reply (usually within 2 minutes)</div>
-        </div>
-      `;
+    if (!pirateCounterOffer) {
+      throw new Error('API did not return counter-offer');
     }
 
-    // NO local UI updates! Wait for polling to get real API data
+    // Save pirate counter-offer to history
+    try {
+      const historyResponse = await fetch(`/api/hijacking/history/${caseId}`);
+      const historyData = await historyResponse.json();
+      const negotiationHistory = historyData.history || [];
+
+      negotiationHistory.push({
+        type: 'pirate',
+        amount: pirateCounterOffer,
+        timestamp: Date.now() / 1000
+      });
+
+      await fetch(`/api/hijacking/history/${caseId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: negotiationHistory })
+      });
+
+      console.log('[Hijacking] Pirate counter-offer saved to history:', pirateCounterOffer);
+    } catch (error) {
+      console.error('[Hijacking] Failed to save pirate counter-offer to history:', error);
+    }
+
+    // Count how many user offers have been made (max 3 before auto-accept bug)
+    const userOfferCount = negotiationHistory.filter(h => h.type === 'user').length;
+    console.log('[Hijacking] User has made', userOfferCount, 'offers');
+
+    // Show new counter-offer UI immediately (no waiting!)
+    showCounterOfferUI(caseId, pirateCounterOffer, userOfferCount);
+
+    // Show notification about pirate response
+    showSideNotification(`☠️ Pirates counter-offered: $${pirateCounterOffer.toLocaleString()}`, 'warning', 6000);
+
+    // Scroll to see the new offer
+    const feed = document.getElementById('messengerFeed');
+    if (feed) {
+      setTimeout(() => {
+        feed.scrollTop = feed.scrollHeight;
+      }, 100);
+    }
 
   } catch (error) {
     console.error('[Hijacking] Error:', error);
     showSideNotification(`Error: ${error.message}`, 'error');
   }
 };
+
+/**
+ * Starts a countdown timer display
+ * @param {number} caseId - Hijacking case ID
+ * @param {number} seconds - Total seconds to count down
+ */
+function startCountdownTimer(caseId, seconds) {
+  const timerEl = document.getElementById(`hijacking-timer-${caseId}`);
+  console.log('[Hijacking] startCountdownTimer called for case', caseId);
+  console.log('[Hijacking] Timer element found:', timerEl);
+
+  if (!timerEl) {
+    console.error('[Hijacking] Timer element not found! ID:', `hijacking-timer-${caseId}`);
+    return;
+  }
+
+  let remaining = seconds;
+  console.log('[Hijacking] Starting countdown from', remaining, 'seconds');
+
+  const interval = setInterval(() => {
+    remaining--;
+    const mins = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    const timeString = `${mins}:${secs.toString().padStart(2, '0')}`;
+
+    if (timerEl) {
+      timerEl.textContent = timeString;
+    }
+
+    if (remaining <= 0) {
+      clearInterval(interval);
+      console.log('[Hijacking] Timer finished');
+    }
+  }, 1000);
+}
+
+/**
+ * Verifies if pirates' counter-offer matches expected amount from API
+ * Checks after 2 minutes, retries up to 4 times if no match
+ * @param {number} caseId - Hijacking case ID
+ * @param {number} expectedAmount - Expected requested_amount from submit-offer response
+ * @param {number} retryCount - Current retry attempt (max 4)
+ */
+async function verifyCounterOffer(caseId, expectedAmount, retryCount = 0) {
+  console.log(`[Hijacking] Verifying counter-offer for case ${caseId}, attempt ${retryCount + 1}/4`);
+  console.log(`[Hijacking] Expected amount: $${expectedAmount.toLocaleString()}`);
+
+  try {
+    // Fetch current case data
+    const response = await fetch('/api/hijacking/get-case', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ case_id: caseId })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.data) {
+      throw new Error('Failed to fetch case data');
+    }
+
+    const currentAmount = data.data.requested_amount;
+    console.log(`[Hijacking] Current requested_amount from API: $${currentAmount.toLocaleString()}`);
+
+    // Check if amounts match
+    if (currentAmount === expectedAmount) {
+      console.log('[Hijacking] ✅ Counter-offer verified! Amounts match.');
+
+      // Save pirate counter-offer to history
+      try {
+        const historyResponse = await fetch(`/api/hijacking/history/${caseId}`);
+        const historyData = await historyResponse.json();
+        const negotiationHistory = historyData.history || [];
+
+        negotiationHistory.push({
+          type: 'pirate',
+          amount: currentAmount,
+          timestamp: Date.now() / 1000
+        });
+
+        await fetch(`/api/hijacking/history/${caseId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ history: negotiationHistory })
+        });
+
+        console.log('[Hijacking] Pirate counter-offer saved to history:', currentAmount);
+      } catch (error) {
+        console.error('[Hijacking] Failed to save pirate counter-offer to history:', error);
+      }
+
+      // Show the new counter-offer UI
+      showCounterOfferUI(caseId, currentAmount);
+
+      // Show notification
+      showSideNotification(`☠️ Pirates counter-offered: $${currentAmount.toLocaleString()}`, 'warning', 8000);
+    } else {
+      // Amounts don't match - retry or fail
+      console.warn(`[Hijacking] ⚠️ Amount mismatch: expected $${expectedAmount.toLocaleString()}, got $${currentAmount.toLocaleString()}`);
+
+      if (retryCount < 3) {
+        // Retry after 30 seconds (max 4 attempts total)
+        console.log(`[Hijacking] Retrying in 30 seconds...`);
+        setTimeout(() => {
+          verifyCounterOffer(caseId, expectedAmount, retryCount + 1);
+        }, 30000);
+      } else {
+        // Max retries reached - show error
+        console.error('[Hijacking] ❌ Max retries reached, verification failed');
+        const waitDiv = document.getElementById(`hijacking-wait-${caseId}`);
+        if (waitDiv) {
+          waitDiv.innerHTML = `
+            <div style="padding: 16px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; text-align: center;">
+              <div style="font-size: 18px; font-weight: bold; margin-bottom: 8px; color: #ef4444;">⚠️ Verification Failed</div>
+              <div style="font-size: 14px; color: #9ca3af; margin-bottom: 12px;">Could not verify pirates' counter-offer</div>
+              <button onclick="location.reload()" style="padding: 8px 16px; background: #3b82f6; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Reload Page</button>
+            </div>
+          `;
+        }
+        showSideNotification('Failed to verify pirates counter-offer. Please reload.', 'error');
+      }
+    }
+  } catch (error) {
+    console.error('[Hijacking] Error verifying counter-offer:', error);
+    showSideNotification(`Error: ${error.message}`, 'error');
+  }
+}
+
+/**
+ * Shows the counter-offer UI after pirate response
+ * @param {number} caseId - Hijacking case ID
+ * @param {number} newAmount - New requested amount from pirates
+ * @param {number} userOfferCount - How many offers user has made (max 3)
+ */
+function showCounterOfferUI(caseId, newAmount, userOfferCount = 0) {
+  const actionsDiv = document.getElementById(`hijacking-actions-${caseId}`);
+  const negotiateDiv = document.getElementById(`hijacking-negotiate-${caseId}`);
+  if (!actionsDiv) return;
+
+  // After 3 user offers: Only accept (game bug pays full initial price after 3rd offer)
+  if (userOfferCount >= 3) {
+    actionsDiv.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; text-align: center; margin-bottom: 8px;">
+          <div style="font-size: 14px; font-weight: bold; color: #ef4444; margin-bottom: 4px;">⚠️ Maximum Offers Reached</div>
+          <div style="font-size: 12px; color: #9ca3af;">You must accept or risk paying the full initial ransom</div>
+        </div>
+        <button class="btn-primary" onclick="window.acceptHijackingPrice(${caseId})" style="width: 100%; padding: 12px; background: #10b981; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Accept Price ($${newAmount.toLocaleString()})</button>
+      </div>
+    `;
+    if (negotiateDiv) negotiateDiv.style.display = 'none';
+    actionsDiv.style.display = 'flex';
+    return;
+  }
+
+  // Check if amount is below $20,000 - only allow accept
+  if (newAmount <= 20000) {
+    actionsDiv.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="padding: 12px; background: rgba(251, 191, 36, 0.1); border-radius: 8px; text-align: center; margin-bottom: 8px;">
+          <div style="font-size: 14px; font-weight: bold; color: #fbbf24; margin-bottom: 4px;">🏴‍☠️ Final Offer</div>
+          <div style="font-size: 12px; color: #9ca3af;">Pirates won't negotiate below $20,000</div>
+        </div>
+        <button class="btn-primary" onclick="window.acceptHijackingPrice(${caseId})" style="width: 100%; padding: 12px; background: #10b981; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Accept Price ($${newAmount.toLocaleString()})</button>
+      </div>
+    `;
+    // Hide negotiate div (not available under 20k)
+    if (negotiateDiv) negotiateDiv.style.display = 'none';
+  } else {
+    // Above $20k - can still negotiate
+    actionsDiv.innerHTML = `
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-primary" onclick="window.acceptHijackingPrice(${caseId})" style="flex: 1; padding: 12px 16px; background: #10b981; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Accept Price</button>
+        <button class="btn-secondary" onclick="window.showNegotiateOptions(${caseId})" style="flex: 1; padding: 12px 16px; background: #3b82f6; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Negotiate Price</button>
+      </div>
+    `;
+
+    // Update negotiate form with new amounts
+    if (negotiateDiv) {
+      negotiateDiv.innerHTML = `
+        <div style="margin-bottom: 12px; font-weight: bold; text-align: center;">Choose your counter-offer:</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <button class="hijacking-offer-btn" data-case-id="${caseId}" data-fixed-amount="20000">
+            <div style="font-weight: bold; margin-bottom: 4px;">A Copper Jot</div>
+            <div style="font-size: 11px; opacity: 0.8;">$20,000</div>
+          </button>
+          <button class="hijacking-offer-btn" data-case-id="${caseId}" data-percentage="0.25">
+            <div style="font-weight: bold; margin-bottom: 4px;">A Tattered Patch</div>
+            <div style="font-size: 11px; opacity: 0.8;">$${Math.floor(newAmount * 0.25).toLocaleString()}</div>
+          </button>
+        </div>
+        <hr style="border: none; border-top: 1px solid rgba(255, 255, 255, 0.1); margin: 12px 0;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+          <button class="hijacking-offer-btn" data-case-id="${caseId}" data-percentage="0.50">
+            <div style="font-weight: bold; margin-bottom: 4px;">A Fair Trade</div>
+            <div style="font-size: 11px; opacity: 0.8;">$${Math.floor(newAmount * 0.50).toLocaleString()}</div>
+          </button>
+          <button class="hijacking-offer-btn" data-case-id="${caseId}" data-percentage="0.75">
+            <div style="font-weight: bold; margin-bottom: 4px;">The Lion's Share</div>
+            <div style="font-size: 11px; opacity: 0.8;">$${Math.floor(newAmount * 0.75).toLocaleString()}</div>
+          </button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <button class="btn-primary" onclick="window.proposeHijackingPrice(${caseId}, ${newAmount})" style="padding: 8px 12px; background: #3b82f6; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Propose Price</button>
+          <button class="btn-secondary" onclick="window.cancelNegotiate(${caseId})" style="padding: 8px 12px; background: #6b7280; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Cancel</button>
+        </div>
+      `;
+      negotiateDiv.style.display = 'none'; // Hidden initially
+
+      // Re-attach event listeners to new buttons
+      negotiateDiv.querySelectorAll('.hijacking-offer-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const btnCaseId = this.dataset.caseId;
+          // Deselect all buttons for this case
+          document.querySelectorAll(`.hijacking-offer-btn[data-case-id="${btnCaseId}"]`).forEach(b => {
+            b.classList.remove('selected', 'hijacking-offer-btn-selected');
+            b.classList.add('hijacking-offer-btn-unselected');
+          });
+          // Select this button
+          this.classList.add('selected', 'hijacking-offer-btn-selected');
+          this.classList.remove('hijacking-offer-btn-unselected');
+        });
+      });
+    }
+  }
+
+  actionsDiv.style.display = 'flex';
+}
 
 /**
  * Start polling for hijacking case updates.

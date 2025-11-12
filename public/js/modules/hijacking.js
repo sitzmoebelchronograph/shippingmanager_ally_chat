@@ -16,6 +16,7 @@
 
 import { openExistingChat } from './messenger.js';
 import { showConfirmDialog } from './ui-dialogs.js';
+import { updateBadge, updateButtonTooltip } from './badge-manager.js';
 
 let allCases = [];
 let ownUserId = null;
@@ -215,26 +216,17 @@ async function deleteCase(caseData) {
  * @param {Object} data - Optional data with openCases and totalCases counts
  */
 export function updateHijackingBadge(data) {
-  const badge = document.getElementById('hijackingBadge');
-  const button = document.getElementById('hijackingBtn');
-
-  if (!badge || !button) return;
-
   if (data) {
     const openCases = data.openCases || 0;
 
-    // Button is always enabled
-    button.disabled = false;
+    // Update badge using badge-manager
+    updateBadge('hijackingBadge', openCases, openCases > 0, 'RED');
 
-    // Badge only shows for OPEN cases
-    if (openCases > 0) {
-      badge.textContent = openCases;
-      badge.classList.remove('hidden');
-      button.title = `Blackbeard's Phone Booth (${openCases} open case${openCases === 1 ? '' : 's'})`;
-    } else {
-      badge.classList.add('hidden');
-      button.title = 'Blackbeard\'s Phone Booth';
-    }
+    // Update tooltip
+    const tooltip = openCases > 0
+      ? `Blackbeard's Phone Booth (${openCases} open case${openCases === 1 ? '' : 's'})`
+      : 'Blackbeard\'s Phone Booth';
+    updateButtonTooltip('hijacking', tooltip);
   }
 }
 

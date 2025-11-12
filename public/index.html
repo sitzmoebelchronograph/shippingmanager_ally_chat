@@ -19,7 +19,7 @@
             <div class="header-top" style="display: flex; justify-content: space-between; align-items: flex-start;">
                 <h1>
                     <span class="header-icon" style="position: relative; display: inline-block;">
-                        <span id="ceoLevelBadge" style="position: relative; display: inline-block; width: 47px; height: 47px; margin-right: 2px; margin-left: -5px; vertical-align: middle; top: -3px;">
+                        <span id="ceoLevelBadge" style="position: relative; display: inline-block; width: 47px; height: 47px; margin-right: 2px; margin-left: -5px; vertical-align: middle; top: 2px;">
                             <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4)); overflow: visible;">
                                 <defs>
                                     <clipPath id="starClip">
@@ -36,7 +36,19 @@
                             <span id="ceoLevelNumber" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 17px; font-weight: 900; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);"></span>
                         </span>
                     </span>
-                    <span class="header-text" id="pageHeaderTitle">Shipping Manager - CoPilot</span>
+                    <span class="header-text">
+                        <div id="pageHeaderTitle">Shipping Manager - CoPilot</div>
+                        <div class="header-bunker-displays">
+                            <button id="fuelBtn" class="action-btn bunker-btn header-bunker-btn">
+                                <div id="fuelFill" class="bunker-fill"></div>
+                                <span class="bunker-content">⛽ <span id="fuelDisplay"></span></span>
+                            </button>
+                            <button id="co2Btn" class="action-btn bunker-btn header-bunker-btn">
+                                <div id="co2Fill" class="bunker-fill"></div>
+                                <span class="bunker-content">💨 <span id="co2Display"></span></span>
+                            </button>
+                        </div>
+                    </span>
                     <button id="notificationBtn" class="megaphone-btn">
                         <span class="megaphone-icon"></span>
                         <span class="sound-waves"></span>
@@ -101,84 +113,61 @@
             </div>
         </div>
 
-        <div class="action-bar" style="justify-content: space-between;">
-            <div style="display: flex; gap: 10px;">
-                <button id="fuelBtn" class="action-btn bunker-btn" title="Buy max fuel" style="position: relative; overflow: hidden;">
-                    <div id="fuelFill" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: transparent; transition: width 0.3s ease, background 0.3s ease; pointer-events: none;"></div>
-                    <span style="position: relative; z-index: 1;">⛽ <span id="fuelDisplay"></span></span>
-                </button>
-                <button id="co2Btn" class="action-btn bunker-btn" title="Buy max CO2" style="position: relative; overflow: hidden;">
-                    <div id="co2Fill" style="position: absolute; left: 0; top: 0; height: 100%; width: 0%; background: transparent; transition: width 0.3s ease, background 0.3s ease; pointer-events: none;"></div>
-                    <span style="position: relative; z-index: 1;">💨 <span id="co2Display"></span></span>
-                </button>
-            </div>
-            <div class="action-buttons-group">
-                <button id="departAllBtn" class="action-btn" disabled title="Depart all vessels from harbor">
-                    🚢
-                    <span id="vesselCount" class="action-badge hidden"></span>
-                </button>
-                <button id="anchorBtn" class="action-btn" title="Purchase anchor points">
-                    ⚓
-                    <span id="anchorCount" class="action-badge hidden"></span>
-                </button>
-                <button id="repairAllBtn" class="action-btn" disabled title="Repair all vessels with high wear">
-                    🔧
-                    <span id="repairCount" class="action-badge hidden"></span>
-                    <span id="drydockCount" class="action-badge-bottom-left hidden"></span>
-                </button>
-                <button id="buyVesselsBtn" class="action-btn" title="Buy vessels">
-                    ⛴️
-                    <span style="position: absolute; bottom: -6px; left: 0px; color: #10b981; font-size: 20px; font-weight: bold; line-height: 1;">+</span>
-                    <span id="pendingVesselsBadge" class="action-badge badge-orange-bg hidden"></span>
-                </button>
-                <button id="sellVesselsBtn" class="action-btn" title="Sell vessels">
-                    ⛴️
-                    <span style="position: absolute; bottom: -6px; left: 0px; color: #ef4444; font-size: 20px; font-weight: bold; line-height: 1;">-</span>
-                </button>
-                <button id="allChatsBtn" class="action-btn" title="View all private messages">
-                    📬
-                    <span id="unreadBadge" class="action-badge badge-red-bg hidden"></span>
-                </button>
-                <button id="hijackingBtn" class="action-btn" title="Blackbeard's Phone Booth">
-                    ☠️
-                    <span id="hijackingBadge" class="action-badge badge-red-bg hidden"></span>
-                </button>
-                <button id="campaignsBtn" class="action-btn" title="Marketing campaigns status">
-                    📊
-                    <span id="campaignsCount" class="action-badge hidden"></span>
-                </button>
-                <button id="coopBtn" class="action-btn" title="Alliance Cooperation" style="display: none;">
-                    🤝
-                    <span id="coopBadge" class="action-badge hidden"></span>
-                </button>
-                <button id="allianceChatBtn" class="action-btn" title="Alliance Chat" style="display: none;">
-                    💬
-                    <span id="allianceChatBadge" class="action-badge badge-red-bg hidden"></span>
-                </button>
-                <button id="contactListBtn" class="action-btn" title="View contact list">
-                    👥
-                </button>
-                <button id="settingsBtn" class="action-btn" title="Settings">
-                    ⚙️
-                </button>
-                <button id="forecastBtn" class="action-btn" title="Forecast Calendar">
-                    📅
-                </button>
-                <button id="logbookBtn" class="action-btn" title="Autopilot Logbook">
-                    📋
-                </button>
-                <button id="docsBtn" class="action-btn" title="Documentation">
-                    📖
-                </button>
-            </div>
-        </div>
-
         <!-- Main Harbor Map Area -->
         <div class="chat-area-wrapper">
             <!-- Leaflet Map Container (now main content) -->
             <div id="harborMapCanvas" class="harbor-map-canvas" style="width: 100%; height: 100%; position: relative;">
                 <!-- Custom Controls (will be positioned by Leaflet) -->
                 <div id="mapCustomControls"></div>
+
+                <!-- Floating Icon Bar (Desktop: horizontal top-right, Mobile: vertical right) -->
+                <div id="mapIconBar" class="map-icon-bar">
+                    <div class="map-icon-item" data-action="departAll" title="Depart all vessels from harbor">
+                        🚢
+                        <span class="map-icon-badge hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="anchor" title="Purchase anchor points">
+                        ⚓
+                        <span class="map-icon-badge hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="repairAll" title="Repair all vessels with high wear">
+                        🔧
+                        <span class="map-icon-badge hidden"></span>
+                        <span class="map-icon-badge-bottom-left hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="buyVessels" title="Buy vessels">
+                        ⛴️
+                        <span class="map-icon-plus">+</span>
+                        <span class="map-icon-badge map-badge-orange hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="sellVessels" title="Sell vessels">
+                        ⛴️
+                        <span class="map-icon-minus">-</span>
+                    </div>
+                    <div class="map-icon-item" data-action="messenger" title="View all private messages">
+                        📬
+                        <span class="map-icon-badge map-badge-red hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="hijacking" title="Blackbeard's Phone Booth">
+                        ☠️
+                        <span class="map-icon-badge map-badge-red hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="campaigns" title="Marketing campaigns status">
+                        📊
+                        <span class="map-icon-badge hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="coop" title="Alliance Cooperation" style="display: none;">
+                        🤝
+                        <span class="map-icon-badge hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="allianceChat" title="Alliance Chat" style="display: none;">
+                        💬
+                        <span class="map-icon-badge map-badge-red hidden"></span>
+                    </div>
+                    <div class="map-icon-item" data-action="contactList" title="View contact list">
+                        👥
+                    </div>
+                </div>
             </div>
 
             <!-- Vessel Detail Panel (slides in from right) -->
@@ -252,7 +241,7 @@
     <div id="logbookOverlay" class="overlay hidden">
         <div class="messenger-window">
             <div class="messenger-header">
-                <h2>📋 Autopilot Logbook</h2>
+                <h2>📋 Captain's Logbook</h2>
                 <span id="logbookCount" class="logbook-count"></span>
                 <button id="logbookCloseBtn" class="close-btn btn-auto-left" onmouseover="this.querySelector('span').style.animation='pulse-arrow 0.6s ease-in-out infinite'" onmouseout="this.querySelector('span').style.animation='none'"><span>×</span></button>
             </div>
@@ -264,6 +253,13 @@
                             <option value="SUCCESS">Success</option>
                             <option value="WARNING">Warning</option>
                             <option value="ERROR">Error</option>
+                        </select>
+                    </div>
+                    <div class="logbook-filter-group">
+                        <select id="logbookFilterTransaction" class="logbook-filter-select">
+                            <option value="ALL">All Transactions</option>
+                            <option value="INCOME">Income Only</option>
+                            <option value="EXPENSE">Expenses Only</option>
                         </select>
                     </div>
                     <div class="logbook-filter-group">
@@ -284,8 +280,18 @@
                         </select>
                     </div>
                     <div class="logbook-filter-group">
-                        <select id="logbookFilterAutopilot" class="logbook-filter-select">
-                            <option value="ALL">All</option>
+                        <select id="logbookFilterAction" class="logbook-filter-select">
+                            <option value="ALL">All Actions</option>
+                            <option disabled>─── Categories ───</option>
+                            <option value="CATEGORY:BUNKER">📦 Bunker</option>
+                            <option value="CATEGORY:VESSEL">🚢 Vessel</option>
+                            <option value="CATEGORY:AUTOPILOT">🤖 Autopilot</option>
+                            <option value="CATEGORY:ANCHOR">⚓ Anchor</option>
+                            <option value="CATEGORY:SETTINGS">⚙️ Settings</option>
+                            <option disabled>─── Sources ───</option>
+                            <option value="SOURCE:MANUAL">✋ Manual</option>
+                            <option value="SOURCE:AUTOPILOT">🤖 Autopilot</option>
+                            <option disabled id="logbookActionsSeparator" style="display:none">─── Actions ───</option>
                         </select>
                     </div>
                 </div>
@@ -1366,11 +1372,11 @@
                 <button id="sortPriceBtn" class="vessel-filter-btn" data-sort="asc">
                     💰 Price ↑
                 </button>
-                <button id="cartBtn" class="vessel-filter-btn hidden">
-                    🛒 Cart (<span id="cartCount"></span>)
-                </button>
                 <button id="filterPendingBtn" class="vessel-filter-btn hidden">
                     ⏱️ Pending (<span id="pendingCount"></span>)
+                </button>
+                <button id="cartBtn" class="vessel-filter-btn hidden">
+                    🛒 Cart (<span id="cartCount"></span>)
                 </button>
                 <button id="bulkBuyBtn" class="bulk-buy-btn hidden">
                     💰 Bulk Buy (<span id="selectedCount"></span>)

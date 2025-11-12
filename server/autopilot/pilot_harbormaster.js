@@ -12,9 +12,20 @@ const logger = require('../utils/logger');
 const { apiCall } = require('../utils/api');
 const config = require('../config');
 const { saveSettings } = require('../settings-schema');
-const { logAutopilotAction } = require('../logbook');
+const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+const { isAutopilotPaused, tryUpdateAllData } = require('../autopilot');
 
 const DEBUG_MODE = config.DEBUG_MODE;
+
+// WebSocket broadcasting function (injected)
+let broadcastToUser = null;
+
+/**
+ * Sets the broadcast function (called by autopilot.js)
+ */
+function setBroadcastFunction(broadcastFn) {
+  broadcastToUser = broadcastFn;
+}
 
 /**
  * Auto-purchase anchor points respecting construction timer.
@@ -28,14 +39,11 @@ const DEBUG_MODE = config.DEBUG_MODE;
  *
  * @async
  * @param {number} userId - User ID for state management
- * @param {boolean} autopilotPaused - Autopilot pause state
- * @param {Function} broadcastToUser - WebSocket broadcast function
- * @param {Function} tryUpdateAllData - Function to update all game data
  * @returns {Promise<void>}
  */
-async function autoAnchorPointPurchase(userId, autopilotPaused, broadcastToUser, tryUpdateAllData) {
+async function autoAnchorPointPurchase(userId) {
   // Check if autopilot is paused
-  if (autopilotPaused) {
+  if (isAutopilotPaused()) {
     logger.debug('[Auto-Anchor Purchase] Skipped - Autopilot is PAUSED');
     return;
   }
@@ -138,18 +146,20 @@ async function autoAnchorPointPurchase(userId, autopilotPaused, broadcastToUser,
     logger.info(`[Auto-Anchor] Success! Purchased ${amount} anchor point(s) for $${totalCost.toLocaleString()}. Construction timer started.`);
 
     // Log to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.ANCHOR,
       'Auto-Anchor',
-      'SUCCESS',
-      `${amount} point${amount > 1 ? 's' : ''} | -$${totalCost.toLocaleString()}`,
+      `${amount} point${amount > 1 ? 's' : ''} | -${formatCurrency(totalCost)}`,
       {
         amount,
         pricePerPoint: price,
         totalCost,
         remainingCash: bunker.cash,
         constructionStarted: true
-      }
+      },
+      'SUCCESS',
+      SOURCES.AUTOPILOT
     );
 
     // Broadcast success notification
@@ -212,19 +222,22 @@ async function autoAnchorPointPurchase(userId, autopilotPaused, broadcastToUser,
     logger.error('[Auto-Anchor] Error:', error.message);
 
     // Log error to autopilot logbook
-    await logAutopilotAction(
+    await auditLog(
       userId,
+      CATEGORIES.ANCHOR,
       'Auto-Anchor',
-      'ERROR',
       `Purchase failed: ${error.message}`,
       {
         error: error.message,
         stack: error.stack
-      }
+      },
+      'ERROR',
+      SOURCES.AUTOPILOT
     );
   }
 }
 
 module.exports = {
-  autoAnchorPointPurchase
+  autoAnchorPointPurchase,
+  setBroadcastFunction
 };

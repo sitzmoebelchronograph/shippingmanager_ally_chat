@@ -27,8 +27,9 @@ import { showConfirmDialog } from './ui-dialogs.js';
  */
 let currentFilters = {
   status: 'ALL',
+  transaction: 'ALL',
   timeRange: 'all',
-  autopilot: 'ALL',
+  action: 'ALL',  // Combined filter: specific action, category, or source
   search: ''
 };
 
@@ -49,12 +50,12 @@ const expandedEntries = new Set();
  * Sets up event listeners and loads initial data
  */
 export function initLogbook() {
-  const logbookBtn = document.getElementById('logbookBtn');
   const logbookOverlay = document.getElementById('logbookOverlay');
   const logbookCloseBtn = document.getElementById('logbookCloseBtn');
   const logbookFilterStatus = document.getElementById('logbookFilterStatus');
+  const logbookFilterTransaction = document.getElementById('logbookFilterTransaction');
   const logbookFilterTime = document.getElementById('logbookFilterTime');
-  const logbookFilterAutopilot = document.getElementById('logbookFilterAutopilot');
+  const logbookFilterAction = document.getElementById('logbookFilterAction');
   const logbookFilterSearch = document.getElementById('logbookFilterSearch');
   const logbookExportBtn = document.getElementById('logbookExportBtn');
   const logbookExportMenu = document.getElementById('logbookExportMenu');
@@ -62,16 +63,16 @@ export function initLogbook() {
   const logbookExportCsv = document.getElementById('logbookExportCsv');
   const logbookExportJson = document.getElementById('logbookExportJson');
 
-  if (!logbookBtn || !logbookOverlay) {
-    console.warn('[Logbook] UI elements not found');
+  if (!logbookOverlay) {
+    console.warn('[Logbook] Overlay not found');
     return;
   }
 
-  // Open logbook
-  logbookBtn.addEventListener('click', async () => {
+  // Expose function to open logbook (called by map icon bar)
+  window.openLogbook = async () => {
     logbookOverlay.classList.remove('hidden');
     await loadLogs();
-  });
+  };
 
   // Close logbook
   logbookCloseBtn.addEventListener('click', () => {
@@ -97,15 +98,21 @@ export function initLogbook() {
     await loadLogs();
   });
 
+  // Filter: Transaction
+  logbookFilterTransaction.addEventListener('change', async (e) => {
+    currentFilters.transaction = e.target.value;
+    await loadLogs();
+  });
+
   // Filter: Time Range
   logbookFilterTime.addEventListener('change', async (e) => {
     currentFilters.timeRange = e.target.value;
     await loadLogs();
   });
 
-  // Filter: Autopilot
-  logbookFilterAutopilot.addEventListener('change', async (e) => {
-    currentFilters.autopilot = e.target.value;
+  // Filter: Action (combined: specific action, category, or source)
+  logbookFilterAction.addEventListener('change', async (e) => {
+    currentFilters.action = e.target.value;
     await loadLogs();
   });
 
@@ -137,11 +144,40 @@ export function initLogbook() {
 }
 
 /**
+ * Converts combined action filter to backend-compatible filters
+ */
+function convertActionFilterToBackend() {
+  const backendFilters = {
+    status: currentFilters.status,
+    transaction: currentFilters.transaction,
+    timeRange: currentFilters.timeRange,
+    search: currentFilters.search,
+    autopilot: 'ALL',
+    category: 'ALL',
+    source: 'ALL'
+  };
+
+  const action = currentFilters.action;
+
+  if (action.startsWith('CATEGORY:')) {
+    backendFilters.category = action.substring(9); // Remove "CATEGORY:" prefix
+  } else if (action.startsWith('SOURCE:')) {
+    backendFilters.source = action.substring(7); // Remove "SOURCE:" prefix
+  } else if (action.startsWith('ACTION:')) {
+    backendFilters.autopilot = action.substring(7); // Remove "ACTION:" prefix
+  }
+  // else action is 'ALL', so all backend filters stay 'ALL'
+
+  return backendFilters;
+}
+
+/**
  * Loads log entries from server with current filters
  */
 async function loadLogs() {
   try {
-    const data = await fetchLogbookEntries(currentFilters);
+    const backendFilters = convertActionFilterToBackend();
+    const data = await fetchLogbookEntries(backendFilters);
 
     if (data.success) {
       logEntries = data.logs || [];
@@ -162,33 +198,63 @@ async function loadLogs() {
 }
 
 /**
- * Updates autopilot filter dropdown with unique autopilot names from logs
+ * Updates action filter dropdown with unique action names from logs
  */
-function updateAutopilotFilter() {
-  const autopilotSelect = document.getElementById('logbookFilterAutopilot');
-  if (!autopilotSelect) return;
+function updateActionFilter() {
+  const actionSelect = document.getElementById('logbookFilterAction');
+  if (!actionSelect) return;
 
-  // Get unique autopilot names from all entries
-  const uniqueAutopilots = [...new Set(logEntries.map(e => e.autopilot))].sort();
+  // Get unique action names from all entries
+  const uniqueActions = [...new Set(logEntries.map(e => e.autopilot))].sort();
 
   // Store current selection
-  const currentValue = autopilotSelect.value;
+  const currentValue = actionSelect.value;
 
-  // Rebuild options
-  autopilotSelect.innerHTML = '<option value="ALL">All</option>';
-  uniqueAutopilots.forEach(autopilot => {
-    const option = document.createElement('option');
-    option.value = autopilot;
-    option.textContent = autopilot;
-    autopilotSelect.appendChild(option);
-  });
+  // Rebuild options - keep categories and sources, add specific actions at the end
+  actionSelect.innerHTML = `
+    <option value="ALL">All Actions</option>
+    <option disabled>─── Categories ───</option>
+    <option value="CATEGORY:BUNKER">📦 Bunker</option>
+    <option value="CATEGORY:VESSEL">🚢 Vessel</option>
+    <option value="CATEGORY:AUTOPILOT">🤖 Autopilot</option>
+    <option value="CATEGORY:ANCHOR">⚓ Anchor</option>
+    <option value="CATEGORY:SETTINGS">⚙️ Settings</option>
+    <option disabled>─── Sources ───</option>
+    <option value="SOURCE:MANUAL">✋ Manual</option>
+    <option value="SOURCE:AUTOPILOT">🤖 Autopilot</option>
+  `;
+
+  // Add separator and specific actions if any exist
+  if (uniqueActions.length > 0) {
+    const separator = document.createElement('option');
+    separator.disabled = true;
+    separator.textContent = '─── Actions ───';
+    actionSelect.appendChild(separator);
+
+    uniqueActions.forEach(action => {
+      const option = document.createElement('option');
+      option.value = `ACTION:${action}`;
+      option.textContent = action;
+      actionSelect.appendChild(option);
+    });
+  }
 
   // Restore selection if still valid
-  if (uniqueAutopilots.includes(currentValue)) {
-    autopilotSelect.value = currentValue;
-  } else if (currentValue !== 'ALL') {
-    autopilotSelect.value = 'ALL';
-    currentFilters.autopilot = 'ALL';
+  if (currentValue.startsWith('ACTION:')) {
+    const actionName = currentValue.substring(7); // Remove "ACTION:" prefix
+    if (uniqueActions.includes(actionName)) {
+      actionSelect.value = currentValue;
+    } else {
+      actionSelect.value = 'ALL';
+      currentFilters.action = 'ALL';
+    }
+  } else if (currentValue !== 'ALL' && !currentValue.startsWith('CATEGORY:') && !currentValue.startsWith('SOURCE:')) {
+    // Old value was something else, reset
+    actionSelect.value = 'ALL';
+    currentFilters.action = 'ALL';
+  } else {
+    // Keep category or source selection
+    actionSelect.value = currentValue;
   }
 }
 
@@ -227,6 +293,64 @@ function searchInObject(obj, searchTerm) {
 }
 
 /**
+ * Determines transaction type from entry summary
+ * @param {Object} entry - Log entry
+ * @returns {string} - 'income', 'expense', or ''
+ */
+function getTransactionType(entry) {
+  if (!entry.summary) return '';
+
+  // Ensure summary is a string
+  const summary = String(entry.summary);
+
+  // Income: summary contains "+$" (e.g., "+$1,234")
+  if (summary.includes('+$')) {
+    return 'income';
+  }
+
+  // Expense: summary contains "-$" (e.g., "-$1,234") OR contains only "$" with specific autopilots
+  if (summary.includes('-$')) {
+    return 'expense';
+  }
+
+  // Additional expense autopilots AND manual actions that show cost without minus sign
+  const expenseActions = [
+    'Auto-Drydock',
+    'Auto-Fuel',
+    'Auto-CO2',
+    'Auto-Anchor Purchase',
+    'Auto-Reputation',
+    'Auto-Repair',
+    'Auto-Blackbeard',
+    'Auto-Campaign',
+    'Manual Fuel Purchase',
+    'Manual CO2 Purchase',
+    'Manual Bulk Repair',
+    'Manual Bulk Drydock',
+    'Manual Vessel Purchase',
+    'Manual Anchor Purchase',
+    'Manual Pay Ransom',
+    'Manual Campaign Activation'
+  ];
+  if (expenseActions.includes(entry.autopilot) && summary.includes('$')) {
+    return 'expense';
+  }
+
+  // Manual Vessel Sale and Departure are income (both manual and auto)
+  const incomeActions = [
+    'Manual Vessel Sale',
+    'Manual Vessel Departure',
+    'Manual-Depart',
+    'Auto-Depart'
+  ];
+  if (incomeActions.includes(entry.autopilot) && summary.includes('$')) {
+    return 'income';
+  }
+
+  return '';
+}
+
+/**
  * Renders the log table with current entries
  */
 function renderLogTable() {
@@ -234,7 +358,7 @@ function renderLogTable() {
   if (!tbody) return;
 
   // Update autopilot filter dropdown with unique autopilot names
-  updateAutopilotFilter();
+  updateActionFilter();
 
   if (logEntries.length === 0) {
     tbody.innerHTML = `
@@ -262,8 +386,12 @@ function renderLogTable() {
     }
     const date = new Date(entry.timestamp);
 
+    // Determine transaction type for styling
+    const transactionType = getTransactionType(entry);
+    const transactionClass = transactionType ? `logbook-${transactionType}` : '';
+
     return `
-      <tr class="logbook-row ${isExpanded ? 'expanded' : ''}" data-id="${entry.id}">
+      <tr class="logbook-row ${isExpanded ? 'expanded' : ''} ${transactionClass}" data-id="${entry.id}">
         <td class="logbook-status ${statusClass}">${statusIcon}</td>
         <td class="logbook-timestamp">${formatTimestamp(date)}</td>
         <td class="logbook-autopilot">${escapeHtml(entry.autopilot)}</td>
@@ -400,7 +528,8 @@ function formatTimestamp(date) {
  */
 async function exportLogs(format) {
   try {
-    const data = await downloadLogbookExport(format, currentFilters);
+    const backendFilters = convertActionFilterToBackend();
+    const data = await downloadLogbookExport(format, backendFilters);
 
     // Create blob and download
     let blob;

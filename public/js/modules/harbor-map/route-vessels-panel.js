@@ -7,7 +7,8 @@
  */
 
 import { showVesselPanel } from './vessel-panel.js';
-import { closeAllPanels } from './map-controller.js';
+import { closeAllPanels, getMap, selectVessel } from './map-controller.js';
+import { isMobileDevice } from '../utils.js';
 
 /**
  * Shows the route vessels panel with a list of vessels
@@ -24,6 +25,16 @@ export function showRoutePanel(routeName, vessels) {
   if (!panel) {
     console.error('[Route Panel] Panel element not found');
     return;
+  }
+
+  // Extract route name from first vessel if routeName is invalid
+  if (!routeName || routeName === 'null' || routeName === 'undefined') {
+    if (vessels && vessels.length > 0 && vessels[0].route_name) {
+      routeName = vessels[0].route_name;
+    } else {
+      console.error('[Route Panel] Cannot determine route name');
+      return;
+    }
   }
 
   console.log(`[Route Panel] Showing panel for route: ${routeName} with ${vessels.length} vessels`);
@@ -65,6 +76,11 @@ export function showRoutePanel(routeName, vessels) {
 
   // Show panel
   panel.classList.add('active');
+
+  // Enable fullscreen on mobile when panel opens
+  if (isMobileDevice()) {
+    document.body.classList.add('map-fullscreen');
+  }
 }
 
 /**
@@ -79,6 +95,20 @@ export function hideRoutePanel() {
   if (!panel) return;
 
   panel.classList.remove('active');
+
+  // Reset transform if panel was dragged
+  panel.style.transform = '';
+  panel.style.transition = '';
+
+  // Close weather popup
+  const map = getMap();
+  if (map) {
+    map.closePopup();
+  }
+
+  // DON'T remove fullscreen here - only in closeRoutePanel()
+  // This allows seamless transitions between panels on mobile
+
   console.log('[Route Panel] Panel hidden');
 }
 
@@ -107,19 +137,9 @@ function storeVessels(vessels) {
 export async function selectRouteVessel(vesselId) {
   console.log(`[Route Panel] Selecting vessel ${vesselId} from route panel`);
 
-  // Find vessel in stored vessels
-  const vessel = currentRouteVessels.find(v => v.id === vesselId);
-
-  if (!vessel) {
-    console.error(`[Route Panel] Vessel ${vesselId} not found in route vessels`);
-    return;
-  }
-
-  // Close all panels first, then show vessel panel
-  await closeAllPanels();
-
-  // Show vessel detail panel
-  await showVesselPanel(vessel);
+  // Use the same selection logic as clicking vessel on map
+  // This will: save state, clear markers, show only vessel+route+2 ports, zoom, open panel
+  await selectVessel(vesselId);
 }
 
 /**
@@ -138,6 +158,20 @@ export async function closeRoutePanel() {
     routeSelect.value = '';
     // Trigger change event to clear filter
     routeSelect.dispatchEvent(new Event('change'));
+  }
+
+  // Remove fullscreen on mobile when explicitly closing panel
+  if (isMobileDevice()) {
+    document.body.classList.remove('map-fullscreen');
+
+    // Force map invalidate size after fullscreen change
+    const { getMap } = await import('./map-controller.js');
+    const map = getMap();
+    if (map) {
+      setTimeout(() => {
+        map.invalidateSize();
+      }, 100);
+    }
   }
 }
 

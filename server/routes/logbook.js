@@ -60,8 +60,11 @@ router.post('/get-logs', async (req, res) => {
 
     const filters = {
       status: req.body.status || 'ALL',
+      transaction: req.body.transaction || 'ALL',
       timeRange: req.body.timeRange || 'all',
       autopilot: req.body.autopilot || 'ALL',
+      category: req.body.category || 'ALL',
+      source: req.body.source || 'ALL',
       search: searchQuery
     };
 
@@ -140,8 +143,11 @@ router.post('/download', async (req, res) => {
 
     const filters = {
       status: req.body.status || 'ALL',
+      transaction: req.body.transaction || 'ALL',
       timeRange: req.body.timeRange || 'all',
       autopilot: req.body.autopilot || 'ALL',
+      category: req.body.category || 'ALL',
+      source: req.body.source || 'ALL',
       search: searchQuery
     };
 

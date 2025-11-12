@@ -735,6 +735,29 @@ router.post('/hijacking/submit-offer', express.json(), async (req, res) => {
 
   try {
     const data = await apiCall('/hijacking/submit-offer', 'POST', { case_id, amount });
+
+    // Log successful offer submission
+    const userId = getUserId();
+    if (userId && data.data) {
+      const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+      const pirateCounter = data.data.requested_amount || data.data.pirate_counter || null;
+
+      await auditLog(
+        userId,
+        CATEGORIES.HIJACKING,
+        'Manual Negotiate Hijacking',
+        `Offered ${formatCurrency(amount)} for Case #${case_id}${pirateCounter ? ` | Pirate counter: ${formatCurrency(pirateCounter)}` : ''}`,
+        {
+          case_id,
+          user_offer: amount,
+          pirate_counter: pirateCounter,
+          status: data.data.status || 'pending'
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+    }
+
     res.json(data);
   } catch (error) {
     logger.error('Error submitting hijacking offer:', error);
@@ -792,6 +815,28 @@ router.post('/hijacking/pay', express.json(), async (req, res) => {
     const verified = actualPaid === expectedAmount;
 
     logger.info(`[Hijacking Payment] Case ${case_id}: Payment verification - Expected: $${expectedAmount}, Actual: $${actualPaid}, Verified: ${verified}`);
+
+    // Log successful ransom payment
+    if (userId && actualPaid > 0) {
+      const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
+
+      await auditLog(
+        userId,
+        CATEGORIES.HIJACKING,
+        'Manual Pay Ransom',
+        `Paid ${formatCurrency(actualPaid)} ransom for Case #${case_id}`,
+        {
+          case_id,
+          amount_paid: actualPaid,
+          expected_amount: expectedAmount,
+          cash_before: cashBefore,
+          cash_after: cashAfter,
+          payment_verified: verified
+        },
+        'SUCCESS',
+        SOURCES.MANUAL
+      );
+    }
 
     // Save verification data to history
     try {

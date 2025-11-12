@@ -8,6 +8,7 @@
 
 import { initMap, loadOverview, setPortFilter, deselectAll, updateWeatherDataSetting } from './harbor-map/map-controller.js';
 import { prefetchHarborMapData, invalidateOverviewCache } from './harbor-map/api-client.js';
+import { initializeMapIconBar } from './map-icon-bar.js';
 
 let mapInitialized = false;
 let autoUpdateInterval = null;
@@ -82,6 +83,14 @@ export async function refreshHarborMapIfOpen() {
     } else {
       // No panel open - safe to refresh display
       await loadOverview();
+
+      // Force map size recalculation (important for mobile/fullscreen transitions)
+      const { getMap } = await import('./harbor-map/map-controller.js');
+      const map = getMap();
+      if (map) {
+        map.invalidateSize();
+      }
+
       console.log('[Harbor Map] Map refreshed with new vessel data');
     }
 
@@ -138,6 +147,9 @@ export async function initHarborMap() {
     mapInitialized = true;
     console.log('Harbor map initialized as main content');
   }
+
+  // Initialize floating icon bar
+  initializeMapIconBar();
 
   // Load data
   await loadOverview();

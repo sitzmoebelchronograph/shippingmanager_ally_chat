@@ -114,6 +114,7 @@ const healthRoutes = require('./server/routes/health');
 const logbookRoutes = require('./server/routes/logbook');
 const harborMapRoutes = require('./server/routes/harbor-map');
 const poiRoutes = require('./server/routes/poi');
+const vesselImageRoutes = require('./server/routes/vessel-image');
 
 // Initialize Express app
 const app = express();
@@ -157,6 +158,7 @@ app.use('/health', healthRoutes);
 app.use('/api/logbook', logbookRoutes);
 app.use('/api/harbor-map', harborMapRoutes);
 app.use('/api/poi', poiRoutes);
+app.use('/api/vessel-image', vesselImageRoutes);
 
 // Autopilot pause/resume endpoint
 app.post('/api/autopilot/toggle', async (req, res) => {
