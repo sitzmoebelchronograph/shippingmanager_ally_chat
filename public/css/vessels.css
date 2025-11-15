@@ -1,0 +1,793 @@
+/**
+ * VESSELS
+ * Vessel catalog, cards, filters, buy/sell, actions, pending vessels
+ *
+ * Dependencies: variables.css
+ */
+
+/* ============================================
+   VESSEL HEADER CONTROLS
+   ============================================ */
+
+.vessel-header-controls {
+  padding: var(--spacing-4) var(--spacing-20);
+  border-bottom: var(--border-default);
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: var(--spacing-6);
+  flex-wrap: wrap;
+}
+
+.vessel-header-controls button {
+  padding: var(--spacing-2) var(--spacing-4);
+  font-size: var(--font-size-12);
+  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: fit-content;
+  height: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Vessel Filter Buttons */
+.vessel-filter-btn {
+  padding: var(--spacing-4) var(--spacing-12);
+  background: var(--gray-800-50);
+  border: 1px solid var(--white-10);
+  border-radius: var(--radius-6);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.2;
+}
+
+.vessel-filter-btn:hover {
+  background: var(--gray-800-80);
+  border-color: var(--white-20);
+}
+
+.vessel-filter-btn.active {
+  background: var(--color-info-20);
+  border-color: var(--color-info-40);
+  color: var(--color-info-light);
+}
+
+#filterPendingBtn {
+  background: var(--color-warning-15);
+  border-color: var(--color-warning-30);
+  color: var(--color-warning-light);
+}
+
+#filterPendingBtn:hover {
+  background: var(--color-warning-25);
+  border-color: var(--color-warning-40);
+}
+
+/* ============================================
+   BULK BUY BUTTON
+   ============================================ */
+
+.bulk-buy-btn {
+  padding: var(--spacing-8) var(--spacing-20);
+  background: var(--color-success-20);
+  border: 1px solid var(--color-success-40);
+  border-radius: var(--radius-6);
+  color: var(--color-success);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.bulk-buy-btn:hover {
+  background: var(--color-success-30);
+  transform: translateY(-1px);
+}
+
+/* ============================================
+   FILTER DROPDOWN
+   ============================================ */
+
+.filter-dropdown-container {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  background: var(--slate-900-98);
+  border: var(--border-lighter);
+  border-radius: var(--radius-8);
+  padding: var(--spacing-12);
+  min-width: 280px;
+  max-height: 500px;
+  overflow-y: auto;
+  z-index: var(--z-dropdown);
+  box-shadow: var(--shadow-lg);
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+/* Webkit browsers for filter dropdown - 1px ultra-thin with normal colors */
+#filterDropdownMenu::-webkit-scrollbar {
+  width: 1px !important;
+  height: 1px !important;
+}
+
+#filterDropdownMenu::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+#filterDropdownMenu::-webkit-scrollbar-thumb {
+  background: var(--color-border) !important;
+  border-radius: var(--radius-2) !important;
+}
+
+#filterDropdownMenu::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-light) !important;
+}
+
+#filterDropdownMenu::-webkit-scrollbar-button {
+  display: none !important;
+}
+
+.filter-dropdown-menu.hidden {
+  display: none;
+}
+
+.filter-section {
+  margin-bottom: var(--spacing-16);
+  padding-bottom: var(--spacing-12);
+  border-bottom: 1px solid var(--white-08);
+}
+
+.filter-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: var(--spacing-12);
+}
+
+.filter-section-title {
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-info-light);
+  margin-bottom: var(--spacing-8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-6) var(--spacing-8);
+  cursor: pointer;
+  border-radius: var(--radius-4);
+  transition: background var(--transition-instant);
+}
+
+.filter-option:hover {
+  background: var(--white-05);
+}
+
+.filter-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin-right: var(--spacing-10);
+  cursor: pointer;
+  accent-color: var(--color-info);
+}
+
+.filter-option span {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+/* ============================================
+   FILTER RESET BAR
+   ============================================ */
+
+.filter-reset-bar {
+  position: sticky;
+  top: 0;
+  background: var(--color-danger-15);
+  border: 1px solid var(--color-danger-30);
+  border-radius: var(--radius-6);
+  padding: var(--spacing-10) var(--spacing-12);
+  margin-bottom: var(--spacing-12);
+  color: var(--color-danger-light);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  z-index: var(--z-above);
+}
+
+.filter-reset-bar:hover {
+  background: var(--color-danger-25);
+  border-color: var(--color-danger-50);
+}
+
+/* ============================================
+   FILTER RANGE CONTROLS
+   ============================================ */
+
+.filter-range-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+  margin-top: var(--spacing-8);
+}
+
+.filter-range-select {
+  flex: 1;
+  background: var(--gray-800-60);
+  border: var(--border-default);
+  border-radius: var(--radius-6);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-6) var(--spacing-8);
+  font-size: var(--font-size-13);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.filter-range-select:hover {
+  background: var(--gray-800-80);
+  border-color: var(--white-20);
+}
+
+.filter-range-select:focus {
+  outline: none;
+  border-color: var(--color-info-50);
+}
+
+.filter-range-select-full {
+  width: 100%;
+  background: var(--gray-800-60);
+  border: var(--border-default);
+  border-radius: var(--radius-6);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-6) var(--spacing-8);
+  font-size: var(--font-size-13);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  max-height: 120px;
+}
+
+.filter-range-select-full:hover {
+  background: var(--gray-800-80);
+  border-color: var(--white-20);
+}
+
+.filter-range-select-full:focus {
+  outline: none;
+  border-color: var(--color-info-50);
+}
+
+.filter-range-separator {
+  color: var(--color-text-tertiary);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ============================================
+   VESSEL CATALOG GRID
+   ============================================ */
+
+.vessel-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-20);
+  padding: 0;
+}
+
+/* Single vessel grid - full width */
+.vessel-catalog-grid.single-vessel {
+  grid-template-columns: 1fr;
+}
+
+/* Single vessel specs - single column layout */
+.vessel-catalog-grid.single-vessel .vessel-specs {
+  grid-template-columns: 1fr;
+}
+
+.lazy-load-sentinel {
+  grid-column: 1 / -1;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============================================
+   VESSEL CARDS
+   ============================================ */
+
+.vessel-card {
+  background: var(--gray-800-40);
+  border: var(--border-default);
+  border-radius: var(--radius-12);
+  overflow: hidden;
+  cursor: default;
+}
+
+.vessel-card.pending-vessel .vessel-content {
+  padding: var(--spacing-16) var(--spacing-16) var(--spacing-8) var(--spacing-16);
+}
+
+.vessel-card.selected {
+  border-color: var(--color-success-50);
+  background: var(--color-success-05);
+}
+
+/* ============================================
+   VESSEL IMAGE
+   ============================================ */
+
+.vessel-image {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  background: var(--slate-900-80);
+  position: relative;
+}
+
+/* ============================================
+   VESSEL BADGES
+   ============================================ */
+
+.vessel-credits-only-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--color-danger);
+  font-size: 80px;
+  font-weight: var(--font-weight-black);
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+.vessel-time-badge {
+  position: absolute;
+  top: var(--spacing-8);
+  left: var(--spacing-8);
+  background: transparent;
+  color: var(--color-danger);
+  padding: var(--spacing-4) var(--spacing-8);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-bold);
+}
+
+.vessel-price-badge {
+  position: absolute;
+  bottom: var(--spacing-8);
+  right: var(--spacing-8);
+  background: var(--color-success-90);
+  color: var(--color-white);
+  padding: var(--spacing-4) var(--spacing-8);
+  border-radius: var(--radius-4);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+}
+
+.discount-badge {
+  background: var(--color-success);
+  color: var(--color-white);
+  padding: 3px 4px 4px 4px;
+  border-radius: var(--radius-3);
+  font-size: var(--font-size-10);
+  font-weight: var(--font-weight-semibold);
+  margin-left: 3px;
+  position: relative;
+  top: -1px;
+}
+
+/* ============================================
+   VESSEL ACTION EMOJIS
+   ============================================ */
+
+.vessel-action-emojis {
+  text-align: right;
+  margin-top: var(--spacing-8);
+  padding: 0 var(--spacing-8) var(--spacing-8) var(--spacing-8);
+}
+
+.action-emoji {
+  cursor: pointer;
+  font-size: var(--font-size-20);
+  margin-left: var(--spacing-12);
+  display: inline-block;
+  transition: transform var(--transition-fast);
+  user-select: none;
+}
+
+.action-emoji:hover {
+  transform: scale(1.2);
+}
+
+/* ============================================
+   VESSEL CONTENT
+   ============================================ */
+
+.vessel-content {
+  padding: var(--spacing-16);
+}
+
+.vessel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: var(--spacing-12);
+  padding-bottom: var(--spacing-8);
+  border-bottom: var(--border-default);
+}
+
+h3.vessel-name,
+.vessel-name {
+  font-size: var(--font-size-16) !important;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.vessel-price {
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-success);
+}
+
+/* ============================================
+   VESSEL SPECS
+   ============================================ */
+
+.vessel-specs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-2);
+  margin-bottom: -5px;
+  font-size: var(--font-size-13);
+}
+
+.vessel-spec {
+  /* No default color - let modifier classes handle colors */
+}
+
+.vessel-spec strong {
+  color: var(--color-text-primary);
+}
+
+/* Vessel Spec Modifier Classes */
+.vessel-spec-divider {
+  grid-column: 1 / -1;
+  border-top: var(--border-default);
+  margin-top: var(--spacing-8);
+  padding-top: var(--spacing-8);
+}
+
+.vessel-spec-fullwidth {
+  grid-column: 1 / -1;
+}
+
+.vessel-spec-gearless {
+  color: var(--color-success);
+}
+
+.vessel-spec-antifouling {
+  color: var(--purple-400);
+}
+
+/* Efficiency color coding for CO2 factor */
+.vessel-spec-co2-efficient {
+  color: var(--color-success) !important; /* Green: factor < 1.0 */
+}
+
+.vessel-spec-co2-standard {
+  color: var(--color-text-secondary) !important; /* Gray: factor = 1.0 */
+}
+
+.vessel-spec-co2-inefficient {
+  color: var(--color-warning-light) !important; /* Orange: factor > 1.0 */
+}
+
+/* Efficiency color coding for Fuel factor */
+.vessel-spec-fuel-efficient {
+  color: var(--color-success) !important; /* Green: factor < 1.0 */
+}
+
+.vessel-spec-fuel-standard {
+  color: var(--color-text-secondary) !important; /* Gray: factor = 1.0 */
+}
+
+.vessel-spec-fuel-inefficient {
+  color: var(--color-warning-light) !important; /* Orange: factor > 1.0 */
+}
+
+/* ============================================
+   VESSEL ACTIONS
+   ============================================ */
+
+.vessel-actions {
+  display: grid !important;
+  grid-template-columns: 60px 1fr !important;
+  gap: var(--spacing-4);
+  margin-top: var(--spacing-12);
+  align-items: center;
+}
+
+.vessel-quantity-input {
+  width: 100%;
+  height: 100%;
+  padding: var(--spacing-4);
+  background: var(--slate-900-80);
+  border: var(--border-default);
+  border-radius: var(--radius-6);
+  color: var(--color-white);
+  font-size: var(--font-size-14);
+  text-align: center;
+  font-weight: var(--font-weight-semibold);
+}
+
+.vessel-action-buttons {
+  display: flex;
+  flex-direction: row;
+  gap: var(--spacing-4);
+}
+
+/* ============================================
+   VESSEL BUTTONS (Select & Buy)
+   ============================================ */
+
+.vessel-select-btn,
+.vessel-buy-btn {
+  flex: 1;
+  padding: var(--spacing-10) var(--spacing-16);
+  border: 1px solid;
+  border-radius: var(--radius-6);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vessel-select-btn {
+  background: var(--color-info-10);
+  border-color: var(--color-info-30);
+  color: var(--color-info-light);
+}
+
+.vessel-select-btn:hover {
+  background: var(--color-info-20);
+}
+
+.vessel-select-btn.selected {
+  background: var(--color-success-20);
+  border-color: var(--color-success-40);
+  color: var(--color-success);
+}
+
+.vessel-buy-btn {
+  background: var(--color-success-10);
+  border-color: var(--color-success-30);
+  color: var(--color-success);
+}
+
+.vessel-buy-btn:hover {
+  background: var(--color-success-20);
+  transform: translateY(-1px);
+}
+
+.vessel-select-btn:disabled,
+.vessel-buy-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--gray-600-10);
+  border-color: var(--gray-600-20);
+  color: var(--color-text-tertiary);
+}
+
+.vessel-select-btn:disabled:hover,
+.vessel-buy-btn:disabled:hover {
+  transform: none;
+  background: var(--gray-600-10);
+}
+
+/* ============================================
+   SELL VESSELS OVERLAY
+   ============================================ */
+
+#sellCartBtn {
+  background: var(--color-success-20);
+  border: 1px solid var(--color-success-40);
+  color: var(--color-success);
+  margin-left: auto;
+}
+
+#sellVesselCatalogFeed {
+  padding: var(--spacing-20);
+  overflow-y: auto;
+}
+
+/* Sell Vessels - Empty State */
+.sell-empty-state {
+  text-align: center;
+  color: var(--color-text-secondary);
+  padding: var(--spacing-40);
+}
+
+.sell-empty-icon {
+  font-size: var(--font-size-48);
+  margin-bottom: var(--spacing-16);
+}
+
+.sell-empty-title {
+  font-size: var(--font-size-18);
+  font-weight: var(--font-weight-semibold);
+  margin-bottom: var(--spacing-8);
+}
+
+.sell-empty-subtitle {
+  font-size: var(--font-size-14);
+}
+
+/* Sell Vessels - Vessel List Section */
+.sell-vessel-list-section {
+  margin-top: var(--spacing-16);
+  padding: 0;
+  background: var(--black-30);
+  border-radius: var(--radius-8);
+}
+
+.sell-vessel-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-8);
+  padding: var(--spacing-12) var(--spacing-12) 0 var(--spacing-12);
+}
+
+.sell-vessel-list-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.sell-vessel-list-count {
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+}
+
+.sell-vessel-list-container {
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: var(--radius-6);
+}
+
+.sell-vessel-list-item {
+  padding: var(--spacing-8) var(--spacing-10);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-13);
+}
+
+.sell-vessel-list-item:nth-child(even) {
+  background: var(--black-20);
+}
+
+.sell-vessel-list-item:nth-child(odd) {
+  background: var(--black-10);
+}
+
+.sell-vessel-item-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-8);
+}
+
+.sell-vessel-checkbox {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.sell-vessel-checkbox-placeholder {
+  width: 16px;
+}
+
+.sell-vessel-name-available {
+  color: var(--color-success);
+}
+
+.sell-vessel-name-unavailable {
+  color: var(--color-text-secondary);
+}
+
+.vessel-locate-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  margin-left: -10px;
+  cursor: pointer;
+  font-size: var(--font-size-16);
+  display: inline-block;
+  transition: color var(--transition-fast);
+  user-select: none;
+  color: inherit;
+}
+
+.vessel-locate-btn-image {
+  position: absolute;
+  bottom: var(--spacing-8);
+  right: var(--spacing-8);
+  margin-left: 0;
+  font-size: var(--font-size-20);
+  z-index: 10;
+}
+
+.vessel-locate-btn span {
+  display: inline-block;
+}
+
+.vessel-locate-btn:hover,
+.vessel-locate-btn:focus,
+.vessel-locate-btn:active {
+  color: var(--color-danger) !important;
+  background: transparent !important;
+  outline: none;
+}
+
+.sell-vessel-status {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+}
+
+.sell-vessel-status span {
+  font-size: var(--font-size-14);
+}
+
+.vessel-sell-now-btn {
+  background: linear-gradient(135deg, var(--color-danger) 0%, var(--color-danger-dark) 100%) !important;
+  color: var(--color-white) !important;
+  border-color: var(--color-danger) !important;
+}
+
+.vessel-sell-now-btn:hover {
+  background: linear-gradient(135deg, var(--color-danger-dark) 0%, var(--color-danger-darker) 100%) !important;
+  transform: translateY(-1px);
+}
+
+.sell-info-notice {
+  padding: var(--spacing-2);
+  background: var(--color-info-10);
+  border: 1px solid var(--color-info-30);
+  border-radius: var(--radius-8);
+  color: var(--color-info-light);
+  margin-bottom: var(--spacing-8);
+}
+
+.sell-section-header {
+  font-size: var(--font-size-20);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 var(--spacing-16) 0;
+  padding-left: var(--spacing-4);
+  border-left: 4px solid;
+}
+
+.sell-section-header.port {
+  color: var(--color-success);
+  border-left-color: var(--color-success);
+}
+
+.sell-section-header.sea {
+  color: var(--color-text-secondary);
+  border-left-color: var(--color-text-secondary);
+  margin-top: var(--spacing-5);
+}

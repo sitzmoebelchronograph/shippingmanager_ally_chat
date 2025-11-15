@@ -2312,9 +2312,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Filter to show only pending vessel purchases (not yet delivered)
   document.getElementById('filterPendingBtn').addEventListener('click', async () => {
     const { fetchVessels } = await import('./modules/api.js');
+    const { showPendingVessels } = await import('./modules/vessel-management.js');
     const response = await fetchVessels();
     const pendingVessels = (response.vessels || []).filter(v => v.status === 'pending');
-    showPendingVessels(pendingVessels);
+    await showPendingVessels(pendingVessels);
   });
 
   // Close vessel catalog overlay
@@ -3458,6 +3459,97 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ===== STEP 8: Update Page Title =====
   // Shows "AutoPilot" indicator in title if any automation features enabled
   updatePageTitle(settings);
+
+  // ===== STEP 8.5: Preload All Images in Background =====
+  // Preload vessel and harbor images silently in background for instant display
+  (async () => {
+    try {
+      // Wait a bit to not block initial page load
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Preload all vessel data and images
+      const { fetchAcquirableVessels, fetchVessels } = await import('./modules/api.js');
+
+      // Load acquirable vessels (buy menu) in background - fills cache and triggers image preload
+      const acquirableData = await fetchAcquirableVessels().catch(err => {
+        console.log('[Preload] Acquirable vessels fetch failed:', err);
+        return null;
+      });
+
+      // Load owned vessels (sell menu) in background - fills cache
+      const ownedData = await fetchVessels().catch(err => {
+        console.log('[Preload] Owned vessels fetch failed:', err);
+        return null;
+      });
+
+      if (window.DEBUG_MODE) {
+        if (ownedData) {
+          console.log(`[Preload] Owned vessels cached: ${ownedData.vessels?.length || 0} vessels`);
+        } else {
+          console.log('[Preload] Owned vessels fetch returned null');
+        }
+      }
+
+      // Also get vessels from harbor map (all 150 vessels)
+      const { getCachedOverview: getMapCache } = await import('./modules/harbor-map/api-client.js');
+      const mapData = getMapCache();
+
+      // Preload ALL vessel images (from acquirable, owned, and map vessels)
+      const allVesselTypes = new Set();
+
+      // Add acquirable vessel types
+      if (acquirableData && acquirableData.data && acquirableData.data.vessels_for_sale) {
+        acquirableData.data.vessels_for_sale.forEach(v => allVesselTypes.add(v.type));
+      }
+
+      // Add owned vessel types
+      if (ownedData && ownedData.vessels) {
+        ownedData.vessels.forEach(v => allVesselTypes.add(v.type));
+      }
+
+      // Add map vessel types (all your vessels including those at sea)
+      if (mapData && mapData.vessels) {
+        mapData.vessels.forEach(v => {
+          if (v.type) allVesselTypes.add(v.type);
+        });
+      }
+
+      if (allVesselTypes.size > 0) {
+        console.log(`[Preload] Caching ${allVesselTypes.size} vessel types...`);
+        [...allVesselTypes].forEach((type, index) => {
+          setTimeout(() => {
+            const img = new Image();
+            img.src = `/api/vessel-image/${type}`;
+          }, index * 100);
+        });
+      }
+
+      // Preload ALL harbor/port images (all 360 ports from game)
+      const { fetchHarborMapOverview } = await import('./modules/harbor-map/api-client.js');
+
+      // Fetch with 'all_ports' filter to get ALL 360 ports (not just my_ports)
+      const harborData = await fetchHarborMapOverview('all_ports').catch(err => {
+        console.log('[Preload] Harbor map fetch failed:', err);
+        return null;
+      });
+
+      if (harborData && harborData.ports) {
+        console.log(`[Preload] Caching ${harborData.ports.length} harbor images...`);
+        harborData.ports.forEach((port, index) => {
+          if (port.code) {
+            setTimeout(() => {
+              const img = new Image();
+              img.src = `/images/ports/${port.code}.jpg`;
+            }, index * 50);
+          }
+        });
+      }
+
+      console.log('[Preload] Background image and data preloading started');
+    } catch (error) {
+      console.log('[Preload] Background preloading failed:', error);
+    }
+  })();
 
   // ===== STEP 9: WebSocket-Only Updates (NO POLLING) =====
   //

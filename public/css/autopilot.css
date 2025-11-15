@@ -1,0 +1,75 @@
+/**
+ * AUTOPILOT
+ * AutoPilot toggle, shiny text effect, min cash inputs, pulse glow animations
+ *
+ * Dependencies: variables.css, base.css (for keyframe animations)
+ */
+
+/* ============================================
+   AUTOPILOT TOGGLE BUTTON
+   ============================================ */
+
+.autopilot-toggle-btn {
+  display: inline-flex;
+  background: transparent;
+  border: 1px solid currentColor;
+  color: inherit;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-round);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-medium);
+  padding: 0;
+  margin-left: var(--spacing-8);
+  vertical-align: middle;
+  position: relative;
+  top: -2px;
+  left: -10px;
+}
+
+.autopilot-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.autopilot-toggle-btn:hover {
+  opacity: 0.8;
+}
+
+.autopilot-toggle-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.autopilot-toggle-btn:active {
+  background: var(--white-10);
+}
+
+/* ============================================
+   AUTOPILOT HEADER TEXT COLORS
+   ============================================ */
+
+.autopilot-active {
+  color: var(--color-success) !important;
+  text-shadow: var(--glow-green);
+  cursor: pointer;
+  padding: var(--spacing-4) var(--spacing-8);
+  border-radius: var(--radius-6);
+  transition: background-color var(--transition-fast);
+  display: inline-block;
+}
+
+.autopilot-active:hover {
+  background-color: var(--color-success-10);
+}
+
+.autopilot-active.paused {
+  color: var(--color-danger) !important;
+  text-shadow: var(--glow-red);
+}
+
+.autopilot-active.paused:hover {
+  background-color: var(--color-danger-10);
+}

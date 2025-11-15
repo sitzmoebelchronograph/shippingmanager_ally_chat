@@ -1,0 +1,774 @@
+/**
+ * OVERLAYS & MODALS
+ * Modal dialogs, messenger windows, confirm dialogs, forecast window
+ *
+ * Dependencies: variables.css
+ */
+
+/* ============================================
+   OVERLAY BACKGROUND
+   ============================================ */
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--black-85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-overlay);
+  overflow: hidden;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+/* ============================================
+   MESSENGER WINDOW
+   ============================================ */
+
+.messenger-window {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-10);
+  box-shadow: var(--shadow-modal-dark);
+  width: 90%;
+  max-width: 600px;
+  min-height: 500px;
+  max-height: calc(100vh - 5px);
+  display: flex;
+  flex-direction: column;
+}
+
+.messenger-window-narrow {
+  max-width: 400px;
+  min-height: 0;
+}
+
+/* Single vessel view - width of one grid column (half of normal width) + padding */
+.messenger-window-single-vessel {
+  width: calc((600px / 2) + 40px) !important; /* Half of max-width (300px) + padding */
+  max-width: calc((600px / 2) + 40px) !important;
+  min-width: 320px !important;
+  min-height: 0 !important;
+}
+
+.messenger-header {
+  background: var(--color-bg-card);
+  padding: 0 var(--spacing-15);
+  border-radius: var(--radius-10) var(--radius-10) 0 0;
+  border-bottom: var(--border-default);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 34px;
+  min-height: 34px;
+  max-height: 34px;
+}
+
+.messenger-header h2 {
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  margin: 0;
+  padding: 0;
+  line-height: var(--line-height-tight);
+  color: var(--color-info-light);
+}
+
+.close-btn {
+  background: none;
+  color: var(--color-text-primary);
+  border: none;
+  font-size: var(--font-size-18);
+  cursor: pointer;
+  transition: color var(--transition-fast);
+  padding: 0 var(--spacing-10);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+}
+
+.close-btn span {
+  display: inline-block;
+}
+
+.close-btn:hover {
+  color: var(--color-danger);
+}
+
+/* Button push to right */
+.btn-auto-left {
+  margin-left: auto;
+}
+
+/* Delete button - red color */
+.btn-delete {
+  color: var(--color-danger);
+}
+
+#backToAllChatsBtn:hover,
+#backToSelectionBtn:hover,
+#backToAllChatsBtn:focus,
+#backToSelectionBtn:focus,
+#backToAllChatsBtn:active,
+#backToSelectionBtn:active,
+.close-btn:hover,
+.close-btn:focus,
+.close-btn:active {
+  color: inherit !important;
+  background: transparent !important;
+  outline: none;
+}
+
+#deleteChatBtn:hover,
+#deleteChatBtn:focus,
+#deleteChatBtn:active {
+  color: var(--color-danger) !important;
+}
+
+/* ============================================
+   FORECAST WINDOW
+   ============================================ */
+
+.forecast-window {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-10);
+  box-shadow: var(--shadow-modal-dark);
+  width: 90%;
+  max-width: 600px;
+  height: 700px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.forecast-window .messenger-header {
+  position: relative;
+  overflow: visible;
+}
+
+/* ============================================
+   FORECAST CALENDAR PAGES
+   ============================================ */
+
+#calendarBook {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  box-sizing: border-box;
+  max-height: calc(100% - 30px);
+  margin-left: 10px;
+}
+
+.stf__block {
+  margin: 0 auto !important;
+}
+
+.page {
+  background: var(--color-bg-card);
+  border: none;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.page:nth-child(odd) {
+  border-right: 1px solid var(--white-10);
+}
+
+.page-content {
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-content h2 {
+  text-align: center;
+  font-size: 2.0vh;
+  margin: 0;
+  padding: 0px;
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+/* ============================================
+   FORECAST TABLE
+   ============================================ */
+
+.forecast-table {
+  width: 100%;
+  height: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: 2.0vh;
+}
+
+.forecast-table thead th {
+  background: var(--white-05);
+  padding: 0.2vh;
+  text-align: center;
+  font-size: 1.8vh;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-white);
+  border-bottom: 1px solid var(--white-10);
+  white-space: nowrap;
+}
+
+.forecast-table tbody td {
+  padding: 0.2vh;
+  text-align: center;
+  border-bottom: 1px solid var(--white-05);
+  font-size: 1.8vh;
+  white-space: nowrap;
+}
+
+.forecast-table tbody tr:hover {
+  background: var(--white-03);
+}
+
+.forecast-table tbody tr.current-hour {
+  box-shadow: 0 0 1px rgba(74, 222, 128, 0.2), inset 0 0 1px rgba(74, 222, 128, 0.1);
+  background: rgba(74, 222, 128, 0.02);
+  position: relative;
+  z-index: 9999;
+}
+
+.not-collected-message {
+  text-align: center;
+  color: var(--color-slate-400);
+  font-style: italic;
+  margin: var(--spacing-20) 0;
+}
+
+/* Forecast Event Badge */
+#forecastEventBadge {
+  display: block;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gradient-success);
+  color: var(--color-white);
+  padding: var(--spacing-6) var(--spacing-12);
+  border-radius: var(--radius-8);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  line-height: 1;
+  box-shadow: 0 2px 8px var(--color-success-40);
+  top: 42px;
+  white-space: nowrap;
+  z-index: var(--z-above);
+}
+
+#forecastEventBadge.shake {
+  animation: shake var(--anim-duration-fast) ease-in-out;
+}
+
+/* ============================================
+   CONFIRM DIALOG
+   ============================================ */
+
+.confirm-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--black-85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-modal);
+}
+
+.confirm-dialog {
+  background: var(--color-bg-secondary);
+  border-radius: var(--radius-10);
+  box-shadow: var(--shadow-modal-dark);
+  width: 90%;
+  max-width: 490px;
+  padding: 0;
+  border: 2px solid var(--color-border);
+}
+
+.confirm-dialog-narrow {
+  max-width: 400px;
+}
+
+.confirm-dialog-header {
+  background: var(--color-bg-card);
+  padding: var(--spacing-20);
+  border-radius: var(--radius-8) var(--radius-8) 0 0;
+  border-bottom: 2px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.confirm-dialog-header h3 {
+  margin: 0;
+  font-size: var(--font-size-20);
+  color: var(--color-info-light);
+  font-weight: var(--font-weight-semibold);
+}
+
+.confirm-dialog-buttons {
+  display: flex;
+  gap: var(--spacing-10);
+}
+
+.confirm-dialog-body {
+  padding: var(--spacing-25);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.confirm-dialog-body p {
+  margin: 0 0 var(--spacing-10) 0;
+  font-size: var(--font-size-15);
+  line-height: var(--line-height-loose);
+  color: var(--color-text-light);
+}
+
+.cart-separator {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--spacing-20) 0;
+}
+
+.confirm-dialog-details {
+  background: var(--color-bg-primary);
+  padding: var(--spacing-15);
+  border-radius: var(--radius-6);
+  margin: var(--spacing-15) 0;
+  border: var(--border-default);
+}
+
+.confirm-dialog-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-8) 0;
+  border-bottom: var(--border-default);
+  font-size: var(--font-size-14);
+}
+
+.confirm-dialog-detail-row:last-child {
+  border-bottom: none;
+  padding-top: var(--spacing-8);
+  margin-top: 0;
+  border-top: none;
+  font-weight: normal;
+  font-size: var(--font-size-13);
+}
+
+.confirm-dialog-detail-row .label {
+  color: var(--color-text-secondary);
+}
+
+.confirm-dialog-detail-row .value {
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Price color classes in dialog (no glow, just color) */
+.confirm-dialog-detail-row .value.fuel-green,
+.confirm-dialog-detail-row .value.co2-green {
+  color: var(--color-success) !important;
+  text-shadow: none !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.confirm-dialog-detail-row .value.fuel-blue,
+.confirm-dialog-detail-row .value.co2-blue {
+  color: var(--color-info-light) !important;
+  text-shadow: none !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.confirm-dialog-detail-row .value.fuel-orange,
+.confirm-dialog-detail-row .value.co2-orange {
+  color: var(--color-warning-light) !important;
+  text-shadow: none !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.confirm-dialog-detail-row .value.fuel-red,
+.confirm-dialog-detail-row .value.co2-red {
+  color: var(--color-danger) !important;
+  text-shadow: none !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+/* Expense rows (Cost, Total Cost) */
+.confirm-dialog-detail-row.expense-row .value {
+  color: var(--color-danger);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Make "Total Cost" row prominent (second-to-last row) */
+.confirm-dialog-detail-row:nth-last-child(2) {
+  border-bottom: none;
+  padding-top: var(--spacing-12);
+  margin-top: var(--spacing-8);
+  border-top: 2px solid var(--color-info-light);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-16);
+}
+
+.confirm-dialog-detail-row:nth-last-child(2) .value {
+  color: var(--color-white);
+}
+
+/* Total Cost - color based on affordability */
+.confirm-dialog-detail-row:nth-last-child(2).affordable .value {
+  color: var(--color-success);
+}
+
+.confirm-dialog-detail-row:nth-last-child(2).too-expensive .value {
+  color: var(--color-danger);
+}
+
+/* Make "Available Cash" less prominent */
+.confirm-dialog-detail-row:last-child .label {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-12);
+}
+
+.confirm-dialog-detail-row:last-child .value {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+}
+
+.confirm-dialog-footer {
+  padding: var(--spacing-20) var(--spacing-25);
+  display: flex;
+  gap: var(--spacing-10);
+  justify-content: flex-end;
+  background: var(--color-bg-primary);
+  border-radius: 0 0 var(--radius-8) var(--radius-8);
+}
+
+.confirm-dialog-btn {
+  padding: var(--spacing-8) var(--spacing-12);
+  border-radius: var(--radius-6);
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  border: none;
+  height: 36px;
+  flex: 1;
+  white-space: nowrap;
+  min-width: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: var(--line-height-tight);
+}
+
+.confirm-dialog-btn.cancel {
+  background: var(--color-gray-600);
+  color: var(--color-text-primary);
+}
+
+.confirm-dialog-btn.cancel:hover {
+  background: var(--color-text-tertiary);
+}
+
+.confirm-dialog-btn.confirm {
+  background: var(--color-info);
+  color: var(--color-white);
+}
+
+.confirm-dialog-btn.confirm:hover {
+  background: var(--color-info-dark);
+}
+
+/* ============================================
+   REPAIR DIALOG STYLES
+   ============================================ */
+
+.repair-summary {
+  background: var(--white-2);
+  padding: var(--spacing-16);
+  border-radius: var(--radius-8);
+  border: var(--border-light);
+  margin-bottom: var(--spacing-16);
+}
+
+.repair-summary.affordable {
+  border-color: var(--color-success-dark-30);
+  background: var(--color-success-dark-5);
+}
+
+.repair-summary.too-expensive {
+  border-color: var(--color-danger-30);
+  background: var(--color-danger-5);
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-8) 0;
+  border-bottom: 1px solid var(--white-5);
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row.total {
+  padding-top: var(--spacing-12);
+  margin-top: var(--spacing-4);
+  border-top: 2px solid var(--white-10);
+}
+
+.summary-row .label {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+}
+
+.summary-row .value {
+  color: var(--color-text-lighter);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-semibold);
+}
+
+.summary-row.total .value {
+  color: var(--color-success);
+  font-size: var(--font-size-18);
+}
+
+.summary-row.cash .value {
+  color: var(--color-success);
+}
+
+.too-expensive .summary-row.total .value {
+  color: var(--color-danger);
+}
+
+/* Repair Vessel List */
+.repair-vessel-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.repair-vessel-header {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: var(--spacing-12);
+  padding: var(--spacing-10) var(--spacing-12);
+  background: var(--white-5);
+  border-radius: var(--radius-6) var(--radius-6) 0 0;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-13);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--white-10);
+}
+
+.repair-vessel-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: var(--spacing-12);
+  padding: var(--spacing-12);
+  background: var(--slate-800-30);
+  border-bottom: 1px solid var(--white-5);
+  transition: var(--transition-fast);
+}
+
+.repair-vessel-row:hover {
+  background: var(--slate-800-50);
+}
+
+.repair-vessel-row:last-child {
+  border-bottom: none;
+  border-radius: 0 0 var(--radius-6) var(--radius-6);
+}
+
+.repair-vessel-row .vessel-name {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repair-vessel-row .vessel-wear {
+  color: var(--color-warning-light);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.repair-vessel-row .vessel-cost {
+  color: var(--color-success);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  text-align: right;
+}
+
+/* ============================================
+   DRYDOCK DIALOG STYLES
+   ============================================ */
+
+.drydock-options {
+  display: flex;
+  gap: var(--spacing-16);
+  margin-bottom: var(--spacing-16);
+  padding: var(--spacing-12);
+  background: var(--slate-800-30);
+  border-radius: var(--radius-6);
+}
+
+.drydock-option-group {
+  flex: 1;
+}
+
+.drydock-option-group label {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--spacing-8);
+}
+
+.drydock-option-group select {
+  width: 100%;
+  padding: var(--spacing-8) var(--spacing-12);
+  background: var(--slate-800-50);
+  border: var(--border-light);
+  border-radius: var(--radius-4);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  cursor: pointer;
+}
+
+.drydock-option-group select:hover {
+  background: var(--slate-800-70);
+  border-color: var(--white-20);
+}
+
+.drydock-vessel-row {
+  display: grid;
+  grid-template-columns: auto 2fr 1fr 1fr 1fr;
+  gap: var(--spacing-12);
+  padding: var(--spacing-12);
+  background: var(--slate-800-30);
+  border-bottom: 1px solid var(--white-5);
+  transition: var(--transition-fast);
+  align-items: center;
+}
+
+.drydock-vessel-row:hover {
+  background: var(--slate-800-50);
+}
+
+.drydock-vessel-row:last-child {
+  border-bottom: none;
+  border-radius: 0 0 var(--radius-6) var(--radius-6);
+}
+
+.drydock-vessel-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.drydock-vessel-row .vessel-name {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drydock-vessel-row .vessel-hours {
+  color: var(--color-warning);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.drydock-vessel-row .vessel-route {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drydock-vessel-row .vessel-cost {
+  color: var(--color-success);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  text-align: right;
+}
+
+/* ============================================
+   CONNECTION LOST OVERLAY
+   ============================================ */
+
+.connection-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--black-50);
+  z-index: var(--z-toast);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  pointer-events: all;
+}
+
+.connection-message {
+  background: var(--color-gray-800);
+  border-radius: var(--radius-12);
+  padding: var(--spacing-40);
+  text-align: center;
+  box-shadow: var(--shadow-2xl);
+  max-width: 500px;
+  border: 2px solid var(--color-gray-700);
+}
+
+.connection-message h2 {
+  color: var(--color-danger);
+  font-size: var(--font-size-28);
+  margin: 0 0 var(--spacing-20) 0;
+  font-weight: var(--font-weight-bold);
+}
+
+.connection-message p {
+  color: var(--color-text-light);
+  font-size: var(--font-size-16);
+  line-height: var(--line-height-loose);
+  margin: var(--spacing-10) 0;
+}
+
+.connection-retry {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-14);
+  font-style: italic;
+  margin-top: var(--spacing-20);
+}

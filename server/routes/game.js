@@ -1690,7 +1690,19 @@ router.post('/vessel/rename-vessel', express.json(), async (req, res) => {
 /** POST /api/check-price-alerts - Manually trigger price alert check (called on page load) */
 router.post('/check-price-alerts', async (req, res) => {
   try {
-    await autopilot.checkPriceAlerts();
+    const userId = getUserId();
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    const state = require('../state');
+    const prices = state.getPrices(userId);
+
+    if (!prices) {
+      return res.status(404).json({ error: 'Prices not available yet' });
+    }
+
+    await autopilot.checkPriceAlerts(userId, prices);
     res.json({ success: true });
   } catch (error) {
     logger.error('[API] Failed to check price alerts:', error.message);

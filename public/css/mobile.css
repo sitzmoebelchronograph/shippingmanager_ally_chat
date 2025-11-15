@@ -1,0 +1,656 @@
+/**
+ * MOBILE
+ * All responsive styles for mobile devices and tablets
+ *
+ * Dependencies: variables.css
+ */
+
+/* ============================================
+   DIALOG BUTTONS - BELOW 800PX
+   ============================================ */
+
+@media (max-width: 800px) {
+  .confirm-dialog-footer {
+    flex-direction: column;
+    gap: var(--spacing-8);
+  }
+
+  .confirm-dialog-btn {
+    width: 100%;
+  }
+
+  .confirm-dialog {
+    width: 95%;
+    max-width: none;
+  }
+}
+
+/* ============================================
+   MOBILE STYLES - BELOW 780PX
+   ============================================ */
+
+@media (max-width: 780px) {
+  body {
+    padding: 0;
+  }
+
+  .container {
+    height: 100vh;
+    max-height: none;
+    border-radius: 0;
+    width: 100%;
+  }
+
+  /* Center header content on mobile */
+  .header {
+    text-align: center !important;
+  }
+
+  .header-top {
+    display: block !important;
+    text-align: center !important;
+  }
+
+  .header h1 {
+    display: inline-block !important;
+    width: auto !important;
+  }
+
+  .header-text {
+    display: block !important;
+    text-align: center !important;
+    line-height: var(--line-height-tight) !important;
+  }
+
+  .header-text > div:first-child {
+    display: inline-flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin-bottom: -4px !important;
+  }
+
+  .header-bunker-displays {
+    display: inline-flex !important;
+    justify-content: center !important;
+    margin-top: -4px !important;
+  }
+
+  /* Action Bar - 3 row mobile layout */
+  .action-bar {
+    padding: var(--spacing-6) var(--spacing-8);
+    gap: var(--spacing-6);
+  }
+
+  .action-bar > div:first-child {
+    padding-left: 0 !important;
+    margin-right: 0 !important;
+    width: 100%;
+    order: 0;
+    justify-content: center;
+  }
+
+  .action-buttons-group {
+    width: 100%;
+    order: 2;
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: var(--spacing-4);
+  }
+
+  .action-buttons-group .action-btn {
+    width: 30px;
+    height: 30px;
+    padding: var(--spacing-4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--font-size-20);
+    margin: 0 auto;
+  }
+
+  .action-buttons-group .action-btn:nth-child(-n+8) {
+    grid-column: span 2;
+  }
+
+  .action-buttons-group .action-btn:nth-child(9) {
+    grid-column: 2 / span 2;
+  }
+
+  .action-buttons-group .action-btn:nth-child(n+10):nth-child(-n+15) {
+    grid-column: span 2;
+  }
+
+  /* Chat area adjustments */
+  .chat-container, .messenger-container, .game-container, .settings-container, .contacts-container {
+    padding: var(--spacing-10);
+  }
+
+  .chat-feed, .messenger-chat-feed {
+    font-size: var(--font-size-13);
+  }
+
+  .message {
+    padding: var(--spacing-8);
+  }
+
+  .message-header {
+    font-size: var(--font-size-12);
+  }
+
+  .message-text {
+    font-size: var(--font-size-13);
+  }
+
+  /* Input section */
+  .input-section {
+    padding: var(--spacing-10);
+  }
+
+  #messageInput {
+    font-size: var(--font-size-14);
+    padding: var(--spacing-8);
+    min-height: 60px;
+    height: auto;
+  }
+
+  textarea {
+    min-height: 60px;
+    height: auto;
+  }
+
+  .char-count {
+    font-size: var(--font-size-11);
+  }
+
+  /* Messenger list */
+  .messenger-list {
+    font-size: var(--font-size-13);
+  }
+
+  .messenger-item {
+    padding: var(--spacing-10);
+  }
+
+  .messenger-item-header {
+    font-size: var(--font-size-13);
+  }
+
+  .messenger-item-preview {
+    font-size: var(--font-size-12);
+  }
+
+  /* Game stats */
+  .game-stats {
+    flex-direction: column;
+    gap: var(--spacing-10);
+  }
+
+  .stat-card {
+    padding: var(--spacing-12);
+  }
+
+  .stat-label {
+    font-size: var(--font-size-12);
+  }
+
+  .stat-value {
+    font-size: var(--font-size-18);
+  }
+
+  /* Buttons */
+  .send-btn, .back-btn, .new-message-btn {
+    font-size: var(--font-size-13);
+    padding: var(--spacing-8) var(--spacing-16);
+  }
+
+  /* Contact list */
+  .contact-item {
+    padding: var(--spacing-10);
+    font-size: var(--font-size-13);
+  }
+
+  /* Settings */
+  .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-8);
+  }
+
+  .setting-item label {
+    font-size: var(--font-size-13);
+  }
+
+  .setting-item input[type="number"],
+  .setting-item select {
+    width: 100%;
+  }
+
+  /* Modals */
+  .modal-content {
+    width: 95%;
+    max-width: none;
+    padding: var(--spacing-15);
+  }
+
+  .modal-header h2 {
+    font-size: var(--font-size-16);
+  }
+
+  .modal-body {
+    font-size: var(--font-size-13);
+  }
+
+  /* Dialog */
+  .confirm-dialog {
+    width: 90%;
+    max-width: none;
+    margin: 0 5%;
+  }
+
+  .confirm-dialog-header {
+    padding: var(--spacing-15);
+  }
+
+  .confirm-dialog-body {
+    padding: var(--spacing-15);
+  }
+
+  .confirm-dialog h3 {
+    font-size: var(--font-size-16);
+  }
+
+  .confirm-dialog-buttons {
+    flex-direction: column;
+    gap: var(--spacing-8);
+  }
+
+  .confirm-dialog-btn {
+    width: 100%;
+  }
+
+  /* Badge positioning */
+  .badge {
+    font-size: var(--font-size-10);
+    min-width: 16px;
+    height: 16px;
+    line-height: 16px;
+  }
+
+  /* Vessel catalog - 1 column on mobile */
+  .vessel-catalog-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Event banner stays in header on mobile */
+  .event-banner-label {
+    font-size: var(--font-size-8);
+  }
+
+  .event-banner-name {
+    font-size: var(--font-size-10);
+  }
+
+  /* Side notifications - max 80% screen width on mobile */
+  #sideNotifications {
+    max-width: 80vw;
+    right: var(--spacing-10);
+  }
+
+  .side-notification {
+    max-width: 80vw;
+  }
+
+  /* Move close button 2px down on mobile and add spacing */
+  .close-btn {
+    top: var(--spacing-4) !important;
+    padding: 0 var(--spacing-6) !important;
+  }
+
+  /* Messenger/Chat windows - 60px less height */
+  .messenger-window,
+  .messenger-window-narrow {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-height: 300px !important;
+    max-height: calc(100vh - 60px) !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Forecast window - full height */
+  .forecast-window {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-height: 300px !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Prevent body scroll when overlay is open */
+  body {
+    overflow: hidden !important;
+    position: fixed !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* Overlay background - center windows vertically */
+  .overlay {
+    padding: 0 !important;
+    align-items: center !important;
+    overflow: hidden !important;
+  }
+
+  /* Make header no border-radius on mobile dialogs */
+  .messenger-window .messenger-header,
+  .messenger-window-narrow .messenger-header,
+  .forecast-window .messenger-header {
+    border-radius: 0;
+    flex-shrink: 0;
+    gap: var(--spacing-4);
+    height: 34px !important;
+    min-height: 34px;
+    max-height: 34px;
+  }
+
+  /* Override inline transforms on button spans */
+  .messenger-window .messenger-header button span,
+  .messenger-window-narrow .messenger-header button span,
+  .messenger-header button span {
+    transform: translateY(0) !important;
+  }
+
+  /* Make chat feed and other content areas fill remaining space and be scrollable */
+  .chat-feed,
+  .messenger-feed,
+  #logbookFeed,
+  #campaignsFeed,
+  #vesselCatalogFeed,
+  #sellVesselCatalogFeed {
+    flex: 1 1 auto !important;
+    overflow-y: auto !important;
+    min-height: 0 !important;
+  }
+
+  /* Messenger input container - fixed size, never grows */
+  .messenger-input {
+    flex: 0 0 auto !important;
+    padding: var(--spacing-8) !important;
+    gap: var(--spacing-6) !important;
+    overflow: visible !important;
+  }
+
+  /* Subject input wrapper */
+  #subjectInputWrapper {
+    flex-shrink: 0 !important;
+  }
+
+  /* Subject input field */
+  #subjectInput {
+    padding: var(--spacing-6) var(--spacing-10) !important;
+    font-size: var(--font-size-13) !important;
+  }
+
+  /* Messenger input row */
+  .messenger-input-row {
+    gap: var(--spacing-6) !important;
+  }
+
+  /* Limit textarea height on mobile */
+  #messengerInput {
+    min-height: 40px !important;
+    max-height: 50px !important;
+    resize: none !important;
+    padding: var(--spacing-8) var(--spacing-10) !important;
+    font-size: var(--font-size-14) !important;
+  }
+
+  /* Send button smaller on mobile */
+  #sendPrivateMessageBtn {
+    padding: var(--spacing-8) var(--spacing-12) !important;
+    font-size: var(--font-size-13) !important;
+    height: auto !important;
+  }
+
+  /* Zoom forecast table on mobile for better readability */
+  .forecast-table {
+    font-size: var(--font-size-18);
+  }
+
+  .forecast-table thead th {
+    font-size: 1.8vh;
+    padding: 0.2vh;
+    font-weight: var(--font-weight-bold);
+  }
+
+  .forecast-table tbody td {
+    padding: 0.2vh;
+    font-size: 1.8vh;
+  }
+
+  /* Vessel filter buttons need proper sizing on mobile */
+  .vessel-filter-btn {
+    padding: var(--spacing-6) var(--spacing-4) !important;
+    font-size: var(--font-size-14) !important;
+    flex: 0 0 calc(80% - 4px);
+    white-space: nowrap;
+    height: auto;
+  }
+
+  .vessel-header-controls {
+    gap: var(--spacing-8);
+    flex-wrap: wrap;
+  }
+
+  /* Quantity input small width on mobile */
+  .vessel-quantity-input {
+    padding: var(--spacing-6) var(--spacing-4) !important;
+    font-size: var(--font-size-13) !important;
+  }
+}
+
+/* ============================================
+   EXTRA SMALL SCREENS - BELOW 415PX
+   ============================================ */
+
+@media (max-width: 415px) {
+  .action-bar {
+    gap: var(--spacing-4);
+  }
+
+  .action-bar > div:first-child {
+    gap: var(--spacing-12) !important;
+  }
+
+  /* Event banner stays in header on extra small screens */
+  .event-banner-btn {
+    padding: var(--spacing-2) var(--spacing-6) !important;
+    font-size: var(--font-size-9) !important;
+  }
+
+  /* Fix vessel buy/select buttons to maintain proper padding */
+  .vessel-select-btn,
+  .vessel-buy-btn {
+    padding: var(--spacing-6) var(--spacing-8) !important;
+  }
+}
+
+/* ============================================
+   DISABLE HOVER EFFECTS ON TOUCH DEVICES
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+  button:hover,
+  .action-btn:hover,
+  .vessel-filter-btn:hover,
+  .bulk-buy-btn:hover,
+  .vessel-card:hover,
+  .vessel-select-btn:hover,
+  .vessel-buy-btn:hover,
+  .confirm-dialog-btn:hover,
+  .close-btn:hover,
+  .company-name:hover {
+    background: inherit !important;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+}
+
+/* ============================================
+   MOBILE PORTRAIT - FULLSCREEN
+   ============================================ */
+
+@media screen and (max-width: 768px) and (orientation: portrait) {
+  html {
+    overflow-x: hidden;
+  }
+
+  body {
+    height: 100vh;
+    height: 100dvh;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    display: block;
+  }
+
+  .container {
+    height: 100vh !important;
+    height: 100dvh !important;
+    max-height: none !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    border-radius: 0;
+    max-width: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .header {
+    flex: 0 0 auto;
+    border-radius: 0;
+    padding-left: var(--spacing-2);
+    text-align: center !important;
+  }
+
+  .header-top {
+    display: block !important;
+  }
+
+  .header h1 {
+    font-size: var(--font-size-18);
+    display: inline-block !important;
+    width: auto !important;
+  }
+
+  .header-text {
+    display: block !important;
+    text-align: center !important;
+    line-height: var(--line-height-tight) !important;
+  }
+
+  .header-text > div:first-child {
+    display: inline-flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    margin-bottom: -4px !important;
+  }
+
+  .header-bunker-displays {
+    display: inline-flex !important;
+    justify-content: center !important;
+    margin-top: -4px !important;
+  }
+
+  .header-info-displays {
+    justify-content: center !important;
+    text-align: center !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Hide coop and campaigns in mobile header */
+  #coopContainer,
+  .header-info-displays > div:has(#campaignsHeaderDisplay) {
+    display: none !important;
+  }
+
+  .action-bar {
+    flex: 0 0 auto;
+  }
+
+  .chat-feed {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .input-section {
+    flex: 0 0 auto;
+    max-height: none;
+    border-radius: 0;
+  }
+}
+
+/* ============================================
+   MOBILE RESPONSIVE - LOGBOOK FILTERS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .logbook-filters {
+    padding: var(--spacing-8) var(--spacing-12);
+    gap: var(--spacing-8);
+  }
+
+  .logbook-filter-row {
+    flex-wrap: wrap;
+    gap: var(--spacing-8);
+  }
+
+  .logbook-filter-row:first-child .logbook-filter-group:nth-child(4) {
+    flex-basis: 100%;
+    width: 100%;
+  }
+
+  .logbook-filter-search {
+    max-width: none;
+    flex: 1;
+    min-width: 0;
+  }
+
+  #logbookFilterStatus,
+  #logbookFilterTime {
+    min-width: 75px;
+  }
+
+  /* Map Icon Bar - Vertical layout on mobile */
+  .map-icon-bar {
+    flex-direction: column;
+    gap: 0;
+    top: 21px;
+  }
+
+  .map-icon-item {
+    font-size: 18px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .map-icon-item[data-action="anchor"] {
+    margin-right: 0;
+  }
+
+  /* Adjust plus/minus position on mobile */
+  .map-icon-plus,
+  .map-icon-minus {
+    bottom: -8px;
+  }
+}

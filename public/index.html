@@ -4,8 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>⚓ Shipping Manager - CoPilot</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <!-- CSS Files - Load in correct order -->
+    <link rel="stylesheet" href="/css/variables.css">
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/header.css">
+    <link rel="stylesheet" href="/css/chat.css">
+    <link rel="stylesheet" href="/css/overlays.css">
+    <link rel="stylesheet" href="/css/notifications.css">
+    <link rel="stylesheet" href="/css/vessels.css">
+    <link rel="stylesheet" href="/css/price-display.css">
+    <link rel="stylesheet" href="/css/autopilot.css">
+    <link rel="stylesheet" href="/css/campaigns.css">
+    <link rel="stylesheet" href="/css/logbook.css">
     <link rel="stylesheet" href="/css/harbor-map.css">
+    <link rel="stylesheet" href="/css/settings.css">
+    <link rel="stylesheet" href="/css/mobile.css">
 </head>
 <body>
     <!-- Hidden Badge Elements (for badge-manager.js sync) -->
@@ -1427,15 +1441,15 @@
     </div>
 
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="/css/leaflet.css" />
+    <link rel="stylesheet" href="/css/MarkerCluster.css" />
+    <link rel="stylesheet" href="/css/MarkerCluster.Default.css" />
     <link rel="stylesheet" href="/css/leaflet-environmental.css" />
 
     <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/vendor/leaflet.js"></script>
     <script src="/js/vendor/leaflet-environmental.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="/js/vendor/leaflet.markercluster.js"></script>
 
     <script type="module" src="/js/script.js"></script>
 </body>

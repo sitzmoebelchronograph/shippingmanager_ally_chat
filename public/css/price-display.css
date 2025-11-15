@@ -1,0 +1,106 @@
+/**
+ * PRICE DISPLAY
+ * Fuel and CO2 price color classes with glow effects
+ *
+ * Dependencies: variables.css
+ */
+
+/* ============================================
+   PRICE ALERT ANIMATION (Below Threshold)
+   ============================================ */
+
+.price-pulse-alert {
+  animation: price-pulse var(--anim-duration-medium) ease-in-out infinite;
+}
+
+@keyframes price-pulse {
+  0%, 100% {
+    color: var(--color-success-light);
+    text-shadow: var(--glow-green);
+  }
+  50% {
+    color: #6ee7b7;
+    text-shadow: var(--glow-green-strong);
+  }
+}
+
+/* ============================================
+   FUEL PRICE COLOR CLASSES
+   ============================================ */
+
+.fuel-green,
+#fuelPriceDisplay.fuel-green,
+.header-bunker-displays #fuelPriceDisplay.fuel-green {
+  color: var(--color-success) !important;
+  text-shadow: var(--glow-green) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.fuel-blue,
+#fuelPriceDisplay.fuel-blue,
+.header-bunker-displays #fuelPriceDisplay.fuel-blue {
+  color: var(--color-info-light) !important;
+  text-shadow: var(--glow-blue) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.fuel-orange,
+#fuelPriceDisplay.fuel-orange,
+.header-bunker-displays #fuelPriceDisplay.fuel-orange {
+  color: var(--color-warning-light) !important;
+  text-shadow: var(--glow-orange) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.fuel-red,
+#fuelPriceDisplay.fuel-red,
+.header-bunker-displays #fuelPriceDisplay.fuel-red {
+  color: var(--color-danger) !important;
+  text-shadow: var(--glow-red) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+/* ============================================
+   CO2 PRICE COLOR CLASSES
+   ============================================ */
+
+.co2-green,
+#co2PriceDisplay.co2-green,
+.header-bunker-displays #co2PriceDisplay.co2-green {
+  color: var(--color-success) !important;
+  text-shadow: var(--glow-green) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.co2-blue,
+#co2PriceDisplay.co2-blue,
+.header-bunker-displays #co2PriceDisplay.co2-blue {
+  color: var(--color-info-light) !important;
+  text-shadow: var(--glow-blue) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.co2-orange,
+#co2PriceDisplay.co2-orange,
+.header-bunker-displays #co2PriceDisplay.co2-orange {
+  color: var(--color-warning-light) !important;
+  text-shadow: var(--glow-orange) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+.co2-red,
+#co2PriceDisplay.co2-red,
+.header-bunker-displays #co2PriceDisplay.co2-red {
+  color: var(--color-danger) !important;
+  text-shadow: var(--glow-red) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+
+/* CO2 Negative/Zero Price (you get paid!) */
+.co2-negative,
+#co2PriceDisplay.co2-negative,
+.header-bunker-displays #co2PriceDisplay.co2-negative {
+  color: var(--color-danger) !important;
+  text-shadow: var(--glow-red) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}

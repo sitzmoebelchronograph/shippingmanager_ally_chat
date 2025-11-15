@@ -8,6 +8,22 @@
  * @module api
  */
 
+// Vessel data cache - only invalidated on actual changes (purchase, sale, WebSocket updates)
+const vesselDataCache = {
+  acquirable: { data: null, valid: false },
+  owned: { data: null, valid: false }
+};
+
+// Force cache refresh (called by WebSocket updates or after purchases/sales)
+export function invalidateVesselCache(type = 'all') {
+  if (type === 'all' || type === 'acquirable') {
+    vesselDataCache.acquirable.valid = false;
+  }
+  if (type === 'all' || type === 'owned') {
+    vesselDataCache.owned.valid = false;
+  }
+}
+
 /**
  * Fetches company name for a user from backend.
  * Backend handles caching, so no frontend cache needed.
@@ -116,11 +132,33 @@ export async function sendChatMessage(message) {
  * @property {number} vessels[].wear - Wear percentage (0-100)
  * @throws {Error} If fetch fails
  */
-export async function fetchVessels() {
+export async function fetchVessels(useCache = true) {
+  // Return cached data if valid
+  if (useCache && vesselDataCache.owned.valid && vesselDataCache.owned.data) {
+    if (window.DEBUG_MODE) {
+      console.log('[API Cache] fetchVessels - returning from cache');
+    }
+    return vesselDataCache.owned.data;
+  }
+
+  if (window.DEBUG_MODE) {
+    console.log('[API Cache] fetchVessels - cache miss, fetching from API (valid:', vesselDataCache.owned.valid, ', hasData:', !!vesselDataCache.owned.data, ')');
+  }
+
   try {
     const response = await fetch(window.apiUrl('/api/vessel/get-vessels'));
     if (!response.ok) throw new Error('Failed to get vessels');
-    return await response.json();
+    const data = await response.json();
+
+    // Update cache
+    vesselDataCache.owned.data = data;
+    vesselDataCache.owned.valid = true;
+
+    if (window.DEBUG_MODE) {
+      console.log('[API Cache] fetchVessels - cached', data.vessels?.length || 0, 'vessels');
+    }
+
+    return data;
   } catch (error) {
     console.error('Error fetching vessels:', error);
     throw error;
@@ -570,11 +608,22 @@ export async function activateCampaign(campaignId) {
  * @property {Array<Object>} vessels - Array of purchasable vessels
  * @throws {Error} If fetch fails
  */
-export async function fetchAcquirableVessels() {
+export async function fetchAcquirableVessels(useCache = true) {
+  // Return cached data if valid
+  if (useCache && vesselDataCache.acquirable.valid && vesselDataCache.acquirable.data) {
+    return vesselDataCache.acquirable.data;
+  }
+
   try {
     const response = await fetch(window.apiUrl('/api/vessel/get-all-acquirable'));
     if (!response.ok) throw new Error('Failed to load vessels');
-    return await response.json();
+    const data = await response.json();
+
+    // Update cache
+    vesselDataCache.acquirable.data = data;
+    vesselDataCache.acquirable.valid = true;
+
+    return data;
   } catch (error) {
     console.error('Error loading vessels:', error);
     throw error;
@@ -606,7 +655,14 @@ export async function purchaseVessel(vesselId, name, antifouling, silent = false
       })
     });
 
-    return await response.json();
+    const result = await response.json();
+
+    // Invalidate vessel cache after successful purchase
+    if (result.success || response.ok) {
+      invalidateVesselCache('owned');
+    }
+
+    return result;
   } catch (error) {
     throw error;
   }

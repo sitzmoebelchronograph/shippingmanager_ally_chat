@@ -272,6 +272,19 @@ async function getCachedMessengerChats() {
 }
 
 /**
+ * Invalidates the cache for a specific hijacking case.
+ * Used after manual payment to force fresh data fetch.
+ *
+ * @param {number} caseId - Hijacking case ID to invalidate
+ */
+function invalidateHijackingCase(caseId) {
+  if (hijackingCaseDetailsCache.has(caseId)) {
+    hijackingCaseDetailsCache.delete(caseId);
+    logger.debug(`[Hijacking Cache] Case ${caseId} invalidated`);
+  }
+}
+
+/**
  * Fetches hijacking case details with shared caching to reduce duplicate API calls.
  *
  * Caching strategy:
@@ -1547,5 +1560,6 @@ module.exports = {
   stopHijackingAutoRefresh,
   triggerImmediateHijackingRefresh,
   getCachedMessengerChats,  // Export shared cache function for use by other modules
-  getCachedHijackingCase    // Export shared cache function for hijacking cases
+  getCachedHijackingCase,   // Export shared cache function for hijacking cases
+  invalidateHijackingCase   // Export cache invalidation function
 };

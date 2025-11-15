@@ -11,6 +11,7 @@
 
 import { showConfirmDialog } from './ui-dialogs.js';
 import { showSideNotification, formatNumber } from './utils.js';
+import { selectVessel } from './harbor-map/map-controller.js';
 
 let currentSellVessels = [];
 let selectedSellVessels = [];
@@ -94,25 +95,82 @@ export async function refreshVesselsForSale() {
 
 /**
  * Loads user's vessels and groups them by model
+ * Uses cache from api.js for instant loading
  */
 async function loadUserVesselsForSale() {
+  const startTime = performance.now();
   try {
-    const response = await fetch(window.apiUrl('/api/vessel/get-vessels'), {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
+    // Import fetchVessels which uses cache
+    const { fetchVessels } = await import('./api.js');
 
-    if (!response.ok) throw new Error('Failed to load vessels');
+    const fetchStart = performance.now();
+    // This will use cache if available (instant), otherwise fetches
+    const data = await fetchVessels();
+    const fetchEnd = performance.now();
+    if (window.DEBUG_MODE) {
+      console.log(`[Sell Perf] Fetch vessels: ${(fetchEnd - fetchStart).toFixed(2)}ms`);
+    }
 
-    const data = await response.json();
     const vessels = data.vessels || [];
 
     currentSellVessels = vessels;
+
+    const displayStart = performance.now();
     await displaySellVessels();
+    const displayEnd = performance.now();
+    if (window.DEBUG_MODE) {
+      console.log(`[Sell Perf] Display vessels: ${(displayEnd - displayStart).toFixed(2)}ms`);
+    }
+
+    const totalTime = performance.now() - startTime;
+    if (window.DEBUG_MODE) {
+      console.log(`[Sell Perf] Total load time: ${totalTime.toFixed(2)}ms`);
+    }
   } catch (error) {
     console.error('[Vessel Selling] Error loading vessels:', error);
     showSideNotification('Failed to load vessels', 'error');
   }
+}
+
+/**
+ * Fetches sell prices for all unique vessel models in parallel
+ * @param {Object} grouped - Grouped vessels by model
+ * @returns {Map} Map of vesselId -> {sellPrice, originalPrice}
+ */
+async function fetchAllSellPrices(grouped) {
+  const priceMap = new Map();
+  const priceRequests = [];
+
+  // Collect all unique vessel IDs (one per model with harbor vessels)
+  Object.entries(grouped).forEach(([modelKey, group]) => {
+    if (group.harborVessels.length > 0) {
+      const vesselId = group.harborVessels[0].id;
+      priceRequests.push(
+        fetch(window.apiUrl('/api/vessel/get-sell-price'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vessel_id: vesselId })
+        })
+          .then(response => response.ok ? response.json() : null)
+          .then(data => {
+            if (data && data.data) {
+              priceMap.set(vesselId, {
+                sellPrice: data.data.selling_price,
+                originalPrice: data.data.original_price
+              });
+            }
+          })
+          .catch(error => {
+            console.error(`[Vessel Selling] Failed to get sell price for vessel ${vesselId}:`, error);
+          })
+      );
+    }
+  });
+
+  // Wait for all price requests to complete in parallel
+  await Promise.all(priceRequests);
+
+  return priceMap;
 }
 
 /**
@@ -165,6 +223,15 @@ async function displaySellVessels() {
   }
 
   const grouped = groupVesselsByModel(filtered);
+  const modelCount = Object.keys(grouped).length;
+
+  // Fetch all sell prices in parallel (MUCH faster than sequential)
+  const priceStart = performance.now();
+  const priceMap = await fetchAllSellPrices(grouped);
+  const priceEnd = performance.now();
+  if (window.DEBUG_MODE) {
+    console.log(`[Sell Perf] Fetched ${priceMap.size} prices in parallel: ${(priceEnd - priceStart).toFixed(2)}ms (${modelCount} models total)`);
+  }
 
   // Separate into harbor and at sea
   const atPort = [];
@@ -188,34 +255,22 @@ async function displaySellVessels() {
   if (atSea.length > 0) {
     const notice = document.createElement('div');
     notice.className = 'sell-info-notice';
-    notice.innerHTML = 'ℹ️ Only vessels at port can be sold. Vessels at sea are shown below for reference.';
+    notice.innerHTML = 'ℹ️ Only vessels at port can be sold.';
     container.appendChild(notice);
   }
 
   // Helper function to render a vessel card
-  const renderVesselCard = async (modelKey, group, canSell) => {
+  const renderVesselCard = async (modelKey, group, canSell, priceInfo) => {
     const model = group.model;
     const allVessels = group.vessels;
     const harborVessels = group.harborVessels;
 
-    // Get actual sell price from API for first harbor vessel
+    // Use pre-fetched price data (passed as parameter)
     let sellPrice;
     let originalPrice;
-    if (harborVessels.length > 0) {
-      try {
-        const priceResponse = await fetch(window.apiUrl('/api/vessel/get-sell-price'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vessel_id: harborVessels[0].id })
-        });
-        if (priceResponse.ok) {
-          const priceData = await priceResponse.json();
-          sellPrice = priceData.data.selling_price;
-          originalPrice = priceData.data.original_price;
-        }
-      } catch (error) {
-        console.error('[Vessel Selling] Failed to get sell price:', error);
-      }
+    if (priceInfo) {
+      sellPrice = priceInfo.sellPrice;
+      originalPrice = priceInfo.originalPrice;
     }
 
     const selectedItem = selectedSellVessels.find(v => v.modelKey === modelKey);
@@ -305,6 +360,7 @@ async function displaySellVessels() {
                     <div class="sell-vessel-item-left">
                       ${canSelect && canSell ? `<input type="checkbox" class="vessel-checkbox sell-vessel-checkbox" data-vessel-id="${v.id}" data-model-key="${modelKey}">` : '<div class="sell-vessel-checkbox-placeholder"></div>'}
                       <span class="${canSelect ? 'sell-vessel-name-available' : 'sell-vessel-name-unavailable'}">${v.name}</span>
+                      <button class="vessel-locate-btn" data-vessel-id="${v.id}" title="Show on map" onmouseover="this.querySelector('span').style.animation='pulse-arrow 0.6s ease-in-out infinite'" onmouseout="this.querySelector('span').style.animation='none'"><span>📍</span></button>
                     </div>
                     <span class="sell-vessel-status">${statusDisplay}</span>
                   </div>
@@ -329,6 +385,25 @@ async function displaySellVessels() {
         ` : ''}
       </div>
     `;
+
+    // Locate vessel on map button handlers - ALWAYS register for all vessels
+    const locateButtons = card.querySelectorAll('.vessel-locate-btn');
+    locateButtons.forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const vesselId = parseInt(btn.dataset.vesselId);
+
+        // Close sell vessels overlay
+        document.getElementById('sellVesselsOverlay').classList.add('hidden');
+
+        // Open harbor map and select vessel
+        if (window.showHarborMapOverlay) {
+          await window.showHarborMapOverlay();
+        }
+
+        // Select the vessel on map
+        await selectVessel(vesselId);
+      });
+    });
 
     if (canSell) {
       const selectBtn = card.querySelector('.vessel-select-btn');
@@ -444,7 +519,9 @@ async function displaySellVessels() {
     const portGrid = document.createElement('div');
     portGrid.className = 'vessel-catalog-grid';
     for (const [modelKey, group] of atPort) {
-      portGrid.appendChild(await renderVesselCard(modelKey, group, true));
+      // Get price info for this vessel model
+      const priceInfo = group.harborVessels.length > 0 ? priceMap.get(group.harborVessels[0].id) : null;
+      portGrid.appendChild(await renderVesselCard(modelKey, group, true, priceInfo));
     }
     container.appendChild(portGrid);
   }
@@ -459,7 +536,8 @@ async function displaySellVessels() {
     const seaGrid = document.createElement('div');
     seaGrid.className = 'vessel-catalog-grid';
     for (const [modelKey, group] of atSea) {
-      seaGrid.appendChild(await renderVesselCard(modelKey, group, false));
+      // No price info for vessels at sea (can't be sold)
+      seaGrid.appendChild(await renderVesselCard(modelKey, group, false, null));
     }
     container.appendChild(seaGrid);
   }

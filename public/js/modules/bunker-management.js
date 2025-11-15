@@ -210,8 +210,8 @@ export async function updateBunkerStatus(settings) {
       fuelPriceDisplay.textContent = `$${formatNumber(fuelPrice)}/t`;
       fuelPriceDisplay.className = ''; // Clear existing classes
 
-      // Check if below alert threshold (pulse animation)
-      if (fuelPrice < settings.fuelThreshold) {
+      // Check if below or equal to alert threshold (pulse animation)
+      if (fuelPrice <= settings.fuelThreshold) {
         fuelPriceDisplay.className = 'price-pulse-alert';
       } else {
         // Apply standard color based on price ranges
@@ -233,8 +233,8 @@ export async function updateBunkerStatus(settings) {
       co2PriceDisplay.textContent = `$${formatNumber(co2Price)}/t`;
       co2PriceDisplay.className = ''; // Clear existing classes
 
-      // Check if below alert threshold (pulse animation)
-      if (co2Price < settings.co2Threshold) {
+      // Check if below or equal to alert threshold (pulse animation)
+      if (co2Price <= settings.co2Threshold) {
         co2PriceDisplay.className = 'price-pulse-alert';
       } else {
         // Apply standard color based on price ranges

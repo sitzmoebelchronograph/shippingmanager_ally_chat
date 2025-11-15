@@ -12,6 +12,7 @@
 
 let pageFlip = null;
 let daysData = [];
+let sourceTimezone = null; // Timezone the source data is in
 let deliveredTimezone = null; // Timezone the data was delivered in
 let currentEventDiscount = null; // Current event discount {percentage, type}
 let currentEventData = null; // Full event data with time_start, time_end (UTC timestamps)
@@ -146,6 +147,14 @@ function createTableHTML(hourlyIntervals, dayNumber, month, year) {
 
     const maxRows = 24;
 
+    // Get current browser time for highlighting
+    const now = new Date();
+    const currentDay = now.getDate();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const currentHour = now.getHours();
+    const currentMinutes = now.getMinutes();
+
     for (let i = 0; i < maxRows; i++) {
         const interval = hourlyIntervals[i];
 
@@ -156,6 +165,18 @@ function createTableHTML(hourlyIntervals, dayNumber, month, year) {
 
         // Times are already in correct timezone from server
         const time = interval.start_time.substring(0, 5);
+
+        // Parse interval hour and minutes
+        const [intervalHour, intervalMinutes] = interval.start_time.split(':').map(Number);
+
+        // Check if this is the current hour slot
+        const isCurrentHour =
+            dayNumber === currentDay &&
+            month === currentMonth &&
+            year === currentYear &&
+            intervalHour === currentHour &&
+            intervalMinutes <= currentMinutes &&
+            currentMinutes < (intervalMinutes + 30);
 
         // Apply discount ONLY if event is active during this specific hour
         let fuelPrice = interval.fuel_price_per_ton;
@@ -174,8 +195,9 @@ function createTableHTML(hourlyIntervals, dayNumber, month, year) {
 
         const fuelClass = getFuelClass(fuelPrice);
         const co2Class = getCo2Class(co2Price);
+        const currentClass = isCurrentHour ? ' current-hour' : '';
 
-        html += `<tr>
+        html += `<tr class="${currentClass}">
                     <td>${time}</td>
                     <td class="${fuelClass}">${fuelPrice}</td>
                     <td class="${co2Class}">${co2Price}</td>

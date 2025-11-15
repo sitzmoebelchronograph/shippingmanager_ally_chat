@@ -572,9 +572,11 @@ function renderHistoryPage() {
       (trip.cargo.dry === 0 && trip.cargo.refrigerated === 0 &&
        trip.cargo.fuel === 0 && trip.cargo.crude_oil === 0);
 
-    // Check if harbor fee is high (threshold: $50,000)
-    const harborFeeThreshold = 50000;
-    const isHighHarborFee = trip.harbor_fee && trip.harbor_fee > harborFeeThreshold;
+    // Check if harbor fee is high (using user's percentage threshold)
+    const settings = window.getSettings ? window.getSettings() : {};
+    const harborFeeThreshold = settings.harborFeeWarningThreshold || 50; // Default 50%
+    const feePercentage = trip.profit > 0 && trip.harbor_fee ? (trip.harbor_fee / trip.profit) * 100 : 0;
+    const isHighHarborFee = feePercentage > harborFeeThreshold;
     const entryClass = isHighHarborFee ? 'history-entry high-harbor-fee' : 'history-entry';
 
     return `
@@ -597,7 +599,7 @@ function renderHistoryPage() {
         </div>
         ${trip.harbor_fee ? `
         <div class="history-row${isHighHarborFee ? ' high-fee-text' : ''}">
-          <span>Harbor Fee: $${trip.harbor_fee.toLocaleString()}</span>
+          <span>Harbor Fee: $${trip.harbor_fee.toLocaleString()} (${Math.round(feePercentage)}%)${isHighHarborFee ? ` (Threshold: ${harborFeeThreshold}%)` : ''}</span>
         </div>
         ` : ''}
         <div class="history-row">

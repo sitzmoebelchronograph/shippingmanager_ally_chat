@@ -49,64 +49,39 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// Centralized data directory for hijack history - use platform-specific AppData (no env vars)
-const { getAppDataDir } = require('../config');
-const APPDATA_DIR = path.join(getAppDataDir(), 'ShippingManagerCoPilot');
-const DATA_DIR = path.join(APPDATA_DIR, 'userdata');
+// Centralized data directory for hijack history
+// In dev mode (py start.py): use local ./userdata
+// In packaged mode (.exe): use AppData/Local
+const os = require('os');
+const isPkg = !!process.pkg;
+
+let DATA_DIR;
+if (isPkg) {
+  // Packaged mode - use AppData
+  const { getAppDataDir } = require('../config');
+  const APPDATA_DIR = path.join(getAppDataDir(), 'ShippingManagerCoPilot');
+  DATA_DIR = path.join(APPDATA_DIR, 'userdata');
+} else {
+  // Dev mode - use local userdata directory
+  DATA_DIR = path.join(__dirname, '../../userdata');
+}
 
 /**
- * Migrates hijack history from old location to APPDATA.
- * Runs once on server startup.
- * Only runs in dev mode (when running from source).
+ * Ensures hijack history directory exists.
+ * Creates the directory if it doesn't exist.
  */
-function migrateHijackHistory() {
-  const newHistoryDir = path.join(DATA_DIR, 'hijack_history');
+function ensureHijackHistoryDir() {
+  const historyDir = path.join(DATA_DIR, 'hijack_history');
 
-  // Create new directory if it doesn't exist
-  if (!fs.existsSync(newHistoryDir)) {
-    fs.mkdirSync(newHistoryDir, { recursive: true });
-  }
-
-  // Only check old location in dev mode (running from source)
-  const isPkg = typeof process.pkg !== 'undefined';
-  if (isPkg) {
-    // Skip migration in packaged mode
-    return;
-  }
-
-  // Old location (for migration - dev mode only)
-  const OLD_DATA_DIR = path.join(__dirname, '../../userdata');
-  const oldHistoryDir = path.join(OLD_DATA_DIR, 'hijack_history');
-
-  // Check if old directory exists and has files
-  if (fs.existsSync(oldHistoryDir)) {
-    try {
-      const files = fs.readdirSync(oldHistoryDir);
-      let migratedCount = 0;
-
-      for (const file of files) {
-        const oldPath = path.join(oldHistoryDir, file);
-        const newPath = path.join(newHistoryDir, file);
-
-        // Only migrate if file doesn't exist in new location
-        if (!fs.existsSync(newPath)) {
-          fs.copyFileSync(oldPath, newPath);
-          migratedCount++;
-        }
-      }
-
-      if (migratedCount > 0) {
-        logger.debug(`[Hijacking] Migrated ${migratedCount} hijack history file(s) to APPDATA`);
-        logger.debug(`[Hijacking] New location: ${newHistoryDir}`);
-      }
-    } catch (error) {
-      logger.error('[Hijacking] Error migrating hijack history:', error.message);
-    }
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(historyDir)) {
+    fs.mkdirSync(historyDir, { recursive: true });
+    logger.debug(`[Hijacking] Created hijack history directory: ${historyDir}`);
   }
 }
 
-// Run migration on module load
-migrateHijackHistory();
+// Ensure directory exists on module load
+ensureHijackHistoryDir();
 
 /**
  * GET /api/contact/get-contacts - Retrieves user's contact list and alliance contacts.
@@ -633,17 +608,30 @@ router.post('/hijacking/history/:caseId', express.json(), (req, res) => {
       fs.mkdirSync(historyDir, { recursive: true });
     }
 
-    // Read existing data to preserve autopilot_resolved flag
+    // Read existing data to preserve metadata fields
     let dataToSave = history;
     if (fs.existsSync(historyFile)) {
       const existingData = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
-      if (!Array.isArray(existingData) && existingData.autopilot_resolved) {
-        // Preserve autopilot_resolved flag
+      if (!Array.isArray(existingData)) {
+        // Preserve ALL metadata fields from existing data
         dataToSave = {
-          history: history,
-          autopilot_resolved: existingData.autopilot_resolved,
-          resolved_at: existingData.resolved_at
+          history: history
         };
+
+        // Preserve autopilot_resolved if it exists
+        if (existingData.autopilot_resolved !== undefined) {
+          dataToSave.autopilot_resolved = existingData.autopilot_resolved;
+        }
+
+        // Preserve resolved_at if it exists
+        if (existingData.resolved_at) {
+          dataToSave.resolved_at = existingData.resolved_at;
+        }
+
+        // Preserve payment_verification if it exists
+        if (existingData.payment_verification) {
+          dataToSave.payment_verification = existingData.payment_verification;
+        }
       }
     }
 
@@ -857,7 +845,7 @@ router.post('/hijacking/pay', express.json(), async (req, res) => {
       // Update history with payment verification (manual payment)
       const updatedHistory = {
         history: historyData,
-        autopilot_resolved: autopilotResolved,
+        autopilot_resolved: false,  // Manual payment = not autopilot
         resolved_at: resolvedAt || Date.now() / 1000,
         payment_verification: {
           verified: verified,
@@ -871,6 +859,21 @@ router.post('/hijacking/pay', express.json(), async (req, res) => {
       fs.writeFileSync(historyPath, JSON.stringify(updatedHistory, null, 2));
     } catch (error) {
       logger.error(`[Hijacking Payment] Case ${case_id}: Failed to save verification:`, error);
+    }
+
+    // Invalidate hijacking cache for this case and trigger immediate refresh
+    try {
+      const { invalidateHijackingCase, triggerImmediateHijackingRefresh } = require('../websocket');
+
+      // Remove this case from cache so next refresh fetches fresh data
+      invalidateHijackingCase(case_id);
+      logger.debug(`[Hijacking Payment] Case ${case_id}: Cache invalidated`);
+
+      // Trigger immediate badge/header refresh
+      triggerImmediateHijackingRefresh();
+      logger.debug(`[Hijacking Payment] Case ${case_id}: Triggered immediate hijacking refresh`);
+    } catch (error) {
+      logger.error(`[Hijacking Payment] Case ${case_id}: Failed to trigger refresh:`, error);
     }
 
     // Return response with verification data

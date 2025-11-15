@@ -48,6 +48,7 @@ import {
   fetchAcquirableVessels,
   purchaseVessel as apiPurchaseVessel
 } from './api.js';
+import { selectVessel } from './harbor-map/map-controller.js';
 import { showConfirmDialog } from './ui-dialogs.js';
 import { getCurrentBunkerState, updateCurrentCash } from './bunker-management.js';
 import { updateBadge, updateButtonState, updateButtonTooltip } from './badge-manager.js';
@@ -132,16 +133,17 @@ function getAvailableAnchorSlots() {
 /**
  * Refresh vessel cards display if vessels are currently visible
  * This updates button states based on available anchor slots
+ * NOTE: This function is no longer called automatically - overlays only refresh when user opens them
+ * Keeping function for backward compatibility but it should not be used
+ * @deprecated Auto-refresh disabled to prevent filter resets
  */
 function refreshVesselCardsIfVisible() {
-  const vesselCatalogFeed = document.getElementById('vesselCatalogFeed');
-  // Only refresh if the vessel catalog is visible and has vessels
-  if (vesselCatalogFeed && allAcquirableVessels.length > 0 && vesselCatalogFeed.children.length > 0) {
-    displayFilteredVessels();
-  }
+  // Function intentionally disabled - do nothing
+  // Vessel catalog will update when user reopens it
+  console.warn('[Vessel Management] refreshVesselCardsIfVisible() called but auto-refresh is disabled');
 }
 
-// Make function available globally for chat.js to call when anchor slots change
+// Keep function on window for backward compatibility but it does nothing now
 window.refreshVesselCardsIfVisible = refreshVesselCardsIfVisible;
 
 /**
@@ -1175,21 +1177,22 @@ export async function repairAllVessels(settings) {
     });
 
     const costData = await costResponse.json();
-    updateButtonState('repairAll', false);
 
     if (!costData.vessels || costData.vessels.length === 0) {
       showSideNotification('No vessels need repair', 'info');
+      updateButtonState('repairAll', false);
       return;
     }
 
-    // Show detailed confirmation dialog with vessel list
+    // Show detailed confirmation dialog with vessel list (button stays disabled)
     const confirmed = await showBulkRepairDialog(costData, settings.maintenanceThreshold);
 
-    if (!confirmed) return;
+    if (!confirmed) {
+      updateButtonState('repairAll', false);
+      return;
+    }
 
-    // Disable button during repair
-    updateButtonState('repairAll', true);
-
+    // Button stays disabled during repair
     // Call backend which handles everything and broadcasts to all clients
     const response = await fetch(window.apiUrl('/api/vessel/bulk-repair'), {
       method: 'POST',
@@ -1202,14 +1205,14 @@ export async function repairAllVessels(settings) {
     // Backend broadcasts notification to ALL clients via WebSocket
     // No need to show notification here - all clients will receive it
 
-    // Re-enable button
-    updateButtonState('repairAll', false);
-
-    // Still update locally for immediate feedback
+    // Update locally for immediate feedback, then re-enable button
     if (window.debouncedUpdateRepairCount && window.debouncedUpdateBunkerStatus) {
-      setTimeout(() => window.debouncedUpdateRepairCount(800), 1000);
-      setTimeout(() => window.debouncedUpdateBunkerStatus(800), 1200);
+      await window.debouncedUpdateRepairCount(800);
+      await window.debouncedUpdateBunkerStatus(800);
     }
+
+    // Re-enable button AFTER badge updates complete
+    updateButtonState('repairAll', false);
 
   } catch (error) {
     // Error notifications are also broadcasted by backend
@@ -1220,15 +1223,18 @@ export async function repairAllVessels(settings) {
   }
 }
 
-export async function loadAcquirableVessels() {
+// Track if filters have been populated to avoid re-populating on every open
+let filtersPopulated = false;
+
+export async function loadAcquirableVessels(preserveFilters = false) {
   try {
     const data = await fetchAcquirableVessels();
     allAcquirableVessels = data.data.vessels_for_sale || [];
 
     if (window.DEBUG_MODE) console.log('[Load Vessels] Loaded', allAcquirableVessels.length, 'vessels');
 
-    // Log first few vessels to understand data structure
-    if (window.DEBUG_MODE && allAcquirableVessels.length > 0) {
+    // Log first few vessels to understand data structure (only once)
+    if (window.DEBUG_MODE && allAcquirableVessels.length > 0 && !filtersPopulated) {
       console.log('[Load Vessels] Sample vessel data:', allAcquirableVessels[0]);
       console.log('[Load Vessels] Vessel types in data:', [...new Set(allAcquirableVessels.map(v => v.capacity_type))]);
       console.log('[Load Vessels] Engine types in data:', [...new Set(allAcquirableVessels.map(v => v.engine_type))]);
@@ -1245,8 +1251,11 @@ export async function loadAcquirableVessels() {
       });
     }
 
-    // Populate dynamic filters based on actual vessel data
-    populateDynamicFilters();
+    // Populate dynamic filters based on actual vessel data (only first time)
+    if (!filtersPopulated) {
+      populateDynamicFilters();
+      filtersPopulated = true;
+    }
 
     // Show/hide "Credits Only" filter based on whether any vessels exist
     const creditsOnlyCheckbox = document.querySelector('input[name="special"][value="credits"]');
@@ -1263,11 +1272,17 @@ export async function loadAcquirableVessels() {
       }
     }
 
-    // Preload common vessel images in background
-    preloadCommonVesselImages();
+    // Vessel images are preloaded on page load (script.js STEP 8.5)
+    // No need to preload here anymore
 
-    // Initialize filters from checkboxes (should all be checked by default)
-    window.applyVesselFilters();
+    // Apply or preserve filters based on parameter
+    if (preserveFilters) {
+      // Just re-display with existing filters (after purchase)
+      displayFilteredVessels();
+    } else {
+      // Initialize filters from DOM checkboxes (first load)
+      window.applyVesselFilters();
+    }
 
     // Restore cart badge from localStorage
     updateCartBadge();
@@ -1291,20 +1306,22 @@ function getCapacityDisplay(vessel) {
   if (vessel.capacity_type === 'container') {
     // Container vessels - capacity_max can be number or object {dry, refrigerated}
     if (typeof vessel.capacity_max === 'object') {
-      const capacity = Math.max(vessel.capacity_max.dry || 0, vessel.capacity_max.refrigerated || 0);
+      // Use ?? 0 as empty vessels (drydock, no cargo) legitimately have 0 capacity used
+      const capacity = Math.max(vessel.capacity_max.dry ?? 0, vessel.capacity_max.refrigerated ?? 0);
       return `${formatNumber(capacity)} TEU`;
     }
-    return `${formatNumber(vessel.capacity_max || 0)} TEU`;
+    return `${formatNumber(vessel.capacity_max ?? 0)} TEU`;
   } else if (vessel.capacity_type === 'tanker') {
     // Tanker vessels - capacity_max can be number or object {crude_oil, fuel}
     if (typeof vessel.capacity_max === 'object') {
-      const capacity = Math.max(vessel.capacity_max.crude_oil || 0, vessel.capacity_max.fuel || 0);
+      // Use ?? 0 as empty vessels (drydock, no cargo) legitimately have 0 capacity used
+      const capacity = Math.max(vessel.capacity_max.crude_oil ?? 0, vessel.capacity_max.fuel ?? 0);
       return `${formatNumber(capacity)} bbl`;
     }
-    return `${formatNumber(vessel.capacity_max || 0)} bbl`;
+    return `${formatNumber(vessel.capacity_max ?? 0)} bbl`;
   } else {
     // Other vessel types (bulk carriers, etc)
-    return `${formatNumber(vessel.capacity_max || 0)}t`;
+    return `${formatNumber(vessel.capacity_max ?? 0)}t`;
   }
 }
 
@@ -1330,7 +1347,29 @@ function getFuelEfficiencyClass(factor) {
   return 'vessel-spec-fuel-inefficient';
 }
 
-export function showPendingVessels(pendingVessels) {
+// Track if pending view is active
+let isPendingViewActive = false;
+let savedFiltersBeforePending = null;
+
+export async function showPendingVessels(pendingVessels) {
+  // Toggle pending view
+  if (isPendingViewActive) {
+    // User clicked pending again - restore previous view
+    isPendingViewActive = false;
+
+    // Show cart button again
+    const cartBtn = document.getElementById('cartBtn');
+    if (cartBtn) cartBtn.classList.remove('hidden');
+
+    // Load and show regular acquirable vessels - this will read filters from DOM
+    await loadAcquirableVessels(false);
+    return;
+  }
+
+  // Entering pending view - save current filters
+  isPendingViewActive = true;
+  savedFiltersBeforePending = JSON.parse(JSON.stringify(currentFilters));
+
   const feed = document.getElementById('vesselCatalogFeed');
 
   const cartBtn = document.getElementById('cartBtn');
@@ -1342,11 +1381,12 @@ export function showPendingVessels(pendingVessels) {
         No pending vessels
       </div>
     `;
+    isPendingViewActive = false;
     return;
   }
 
-  // Apply filters to pending vessels
-  const filteredVessels = pendingVessels.filter(vesselPassesFilters);
+  // Show ALL pending vessels - no filters applied
+  const filteredVessels = pendingVessels;
 
   // Sort by price
   filteredVessels.sort((a, b) => {
@@ -1370,7 +1410,7 @@ export function showPendingVessels(pendingVessels) {
   currentlyDisplayedVessels = filteredVessels;
 
   const grid = document.createElement('div');
-  grid.className = 'vessel-catalog-grid';
+  grid.className = filteredVessels.length === 1 ? 'vessel-catalog-grid single-vessel' : 'vessel-catalog-grid';
   grid.id = 'vesselCatalogGrid';
 
   // Disconnect existing observer if any
@@ -1382,78 +1422,10 @@ export function showPendingVessels(pendingVessels) {
   const initialBatch = filteredVessels.slice(0, INITIAL_LOAD_COUNT);
 
   initialBatch.forEach(vessel => {
-    const imageUrl = `/api/vessel-image/${vessel.type}`;
-
-    let timeDisplay = '';
-    const remaining = vessel.time_arrival || 0;
-
-    if (remaining > 0) {
-      const days = Math.floor(remaining / 86400);
-      const hours = Math.floor((remaining % 86400) / 3600);
-      const minutes = Math.floor((remaining % 3600) / 60);
-      if (days > 0) {
-        timeDisplay = `${days}d ${hours}h`;
-      } else if (hours > 0) {
-        timeDisplay = `${hours}h ${minutes}m`;
-      } else {
-        timeDisplay = `${minutes}m`;
-      }
-    } else {
-      timeDisplay = 'Ready';
-    }
-
-    const capacityDisplay = getCapacityDisplay(vessel);
-    const co2Class = getCO2EfficiencyClass(vessel.co2_factor);
-    const fuelClass = getFuelEfficiencyClass(vessel.fuel_factor);
-
-    let additionalAttrs = '';
-    if (vessel.width && vessel.width !== 0) {
-      additionalAttrs += `<div class="vessel-spec"><strong>Width:</strong> ${vessel.width} m</div>`;
-    }
-    if (vessel.price_in_points && vessel.price_in_points !== 0) {
-      additionalAttrs += `<div class="vessel-spec"><strong>Points Price:</strong> ${formatNumber(vessel.price_in_points)}</div>`;
-    }
-    if (vessel.perks && vessel.perks !== null) {
-      additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${vessel.perks}</div>`;
-    }
-
-    const card = document.createElement('div');
-    card.className = 'vessel-card pending-vessel';
-    card.innerHTML = `
-      <div class="vessel-image-container">
-        <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
-        ${vessel.only_for_credits ? '<div class="vessel-credits-only-badge">$</div>' : ''}
-        <div class="vessel-time-badge">⏱️ ${timeDisplay}</div>
-        <div class="vessel-price-badge">$${formatNumber(vessel.price || 0)}</div>
-      </div>
-      <div class="vessel-content">
-        <div class="vessel-header">
-          <h3 class="vessel-name">${vessel.name}</h3>
-        </div>
-        <div class="vessel-specs">
-          <div class="vessel-spec"><strong>Capacity:</strong> ${capacityDisplay}</div>
-          <div class="vessel-spec"><strong>Range:</strong> ${formatNumber(vessel.range || 0)} nm</div>
-          <div class="vessel-spec ${co2Class}"><strong>CO2 Factor:</strong> ${vessel.co2_factor}</div>
-          <div class="vessel-spec ${fuelClass}"><strong>Fuel Factor:</strong> ${vessel.fuel_factor}</div>
-          <div class="vessel-spec"><strong>Fuel Cap.:</strong> ${formatNumber(vessel.fuel_capacity || 0)} t</div>
-          <div class="vessel-spec"><strong>Service:</strong> ${vessel.hours_between_service || 0}h</div>
-          <div class="vessel-spec"><strong>Engine:</strong> ${vessel.engine_type || 'N/A'} (${formatNumber(vessel.kw || 0)} kW)</div>
-          <div class="vessel-spec"><strong>Speed:</strong> ${vessel.max_speed || 0} kn</div>
-          <div class="vessel-spec"><strong>Type:</strong> ${vessel.type_name || vessel.type}</div>
-          <div class="vessel-spec"><strong>Port:</strong> ${(vessel.current_port_code || '').replace(/_/g, ' ')}</div>
-          <div class="vessel-spec"><strong>Year:</strong> ${vessel.year || 'N/A'}</div>
-          <div class="vessel-spec"><strong>Length:</strong> ${vessel.length || 0} m</div>
-          <div class="vessel-spec"><strong>IMO:</strong> ${vessel.imo || 'N/A'}</div>
-          <div class="vessel-spec"><strong>MMSI:</strong> ${vessel.mmsi || 'N/A'}</div>
-          ${vessel.gearless || vessel.antifouling || additionalAttrs ? '<div class="vessel-spec-divider"></div>' : ''}
-          ${vessel.gearless ? '<div class="vessel-spec vessel-spec-fullwidth vessel-spec-gearless"><strong>⚙️ Gearless:</strong> own cranes</div>' : ''}
-          ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${vessel.antifouling}</div>` : ''}
-          ${additionalAttrs}
-        </div>
-      </div>
-    `;
+    // Use the same createVesselCard() function for consistent styling
+    // Mark as pending vessel for any special styling needed
+    const card = createVesselCard(vessel, true); // true = isPending
     grid.appendChild(card);
-    loadedCount++;
   });
 
   // If more vessels exist, add lazy load sentinel
@@ -1480,6 +1452,17 @@ export function showPendingVessels(pendingVessels) {
 
   feed.innerHTML = '';
   feed.appendChild(grid);
+
+  // Adjust window size if only 1 vessel is displayed
+  const buyVesselsOverlay = document.getElementById('buyVesselsOverlay');
+  const messengerWindow = buyVesselsOverlay?.querySelector('.messenger-window');
+  if (messengerWindow) {
+    if (filteredVessels.length === 1) {
+      messengerWindow.classList.add('messenger-window-single-vessel');
+    } else {
+      messengerWindow.classList.remove('messenger-window-single-vessel');
+    }
+  }
 
   if (window.DEBUG_MODE) console.log(`[Pending Vessels] Showing ${Math.min(INITIAL_LOAD_COUNT, filteredVessels.length)} of ${filteredVessels.length} vessels (lazy loading enabled)`);
 }
@@ -2094,7 +2077,7 @@ export async function purchaseSingleVessel(vessel, quantity = 1) {
   selectedVessels = selectedVessels.filter(v => v.vessel.id !== vessel.id);
   updateCartBadge();
 
-  await loadAcquirableVessels();
+  await loadAcquirableVessels(true);
 }
 
 export async function purchaseBulk() {
@@ -2248,7 +2231,7 @@ export async function purchaseBulk() {
     await updateVesselCount();
   }
 
-  await loadAcquirableVessels();
+  await loadAcquirableVessels(true);
 }
 
 export function setVesselFilter(filter) {
@@ -2739,83 +2722,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ===== IMAGE CACHING SYSTEM =====
 // Since same vessel.type = same image, cache images by type to avoid redundant loads
-const vesselImageCache = new Map();
-const vesselImagePreloadQueue = new Set();
-
-/**
- * Preload vessel images by type to optimize performance
- * Same vessel type = same image, so we only need to load each type once
- */
-function preloadVesselImage(vesselType) {
-  if (vesselImageCache.has(vesselType) || vesselImagePreloadQueue.has(vesselType)) {
-    return; // Already cached or being preloaded
-  }
-
-  vesselImagePreloadQueue.add(vesselType);
-
-  const img = new Image();
-  const imageUrl = `/api/vessel-image/${vesselType}`;
-
-  img.onload = () => {
-    vesselImageCache.set(vesselType, imageUrl);
-    vesselImagePreloadQueue.delete(vesselType);
-    if (window.DEBUG_MODE) console.log(`[Image Cache] ✓ Cached image for type: ${vesselType}`);
-  };
-
-  img.onerror = () => {
-    vesselImagePreloadQueue.delete(vesselType);
-    if (window.DEBUG_MODE) console.warn(`[Image Cache] ✗ Failed to load image for type: ${vesselType}`);
-  };
-
-  img.src = imageUrl;
-}
-
-/**
- * Preload images for visible vessel types
- * Call this after vessels are loaded to start caching common images
- */
-function preloadCommonVesselImages() {
-  if (allAcquirableVessels.length === 0) return;
-
-  // Get unique vessel types and their frequency
-  const typeFrequency = {};
-  allAcquirableVessels.forEach(v => {
-    typeFrequency[v.type] = (typeFrequency[v.type] || 0) + 1;
-  });
-
-  // Sort by frequency (most common first)
-  const sortedTypes = Object.keys(typeFrequency).sort((a, b) => typeFrequency[b] - typeFrequency[a]);
-
-  // Preload top 20 most common types
-  const typesToPreload = sortedTypes.slice(0, 20);
-  if (window.DEBUG_MODE) console.log(`[Image Cache] Preloading ${typesToPreload.length} most common vessel types...`);
-
-  typesToPreload.forEach((type, index) => {
-    // Stagger preloading to avoid overwhelming the browser
-    setTimeout(() => preloadVesselImage(type), index * 100);
-  });
-}
+// Vessel image preloading completely handled in script.js STEP 8.5
+// All vessel and harbor images are preloaded on page load in background
 
 /**
  * Create a vessel card element with image caching
  */
-function createVesselCard(vessel) {
+function createVesselCard(vessel, isPending = false) {
   const imageUrl = `/api/vessel-image/${vessel.type}`;
 
-  // Trigger preload for this vessel type if not already cached
-  if (!vesselImageCache.has(vessel.type)) {
-    preloadVesselImage(vessel.type);
+  // Images are preloaded on page load (script.js STEP 8.5)
+  // No need to check cache here - all images already loaded
+
+  // Pending vessels don't show purchase buttons
+  let isVesselTypeLocked = false;
+  let availableSlots = 0;
+  let canPurchase = false;
+
+  if (!isPending) {
+    // Check if user has unlocked this vessel type
+    // Container is ALWAYS unlocked (everyone has it by default)
+    // Tanker is locked until company_type includes "tanker"
+    const userCompanyType = window.USER_COMPANY_TYPE;
+    isVesselTypeLocked = vessel.capacity_type === 'tanker' && (!userCompanyType || !userCompanyType.includes('tanker'));
+
+    // Check if anchor slots are available
+    availableSlots = getAvailableAnchorSlots();
+    canPurchase = availableSlots > 0 && !isVesselTypeLocked;
   }
-
-  // Check if user has unlocked this vessel type
-  // Container is ALWAYS unlocked (everyone has it by default)
-  // Tanker is locked until company_type includes "tanker"
-  const userCompanyType = window.USER_COMPANY_TYPE;
-  const isVesselTypeLocked = vessel.capacity_type === 'tanker' && (!userCompanyType || !userCompanyType.includes('tanker'));
-
-  // Check if anchor slots are available
-  const availableSlots = getAvailableAnchorSlots();
-  const canPurchase = availableSlots > 0 && !isVesselTypeLocked;
 
   const capacityDisplay = getCapacityDisplay(vessel);
   const co2Class = getCO2EfficiencyClass(vessel.co2_factor);
@@ -2833,12 +2767,25 @@ function createVesselCard(vessel) {
   }
 
   const card = document.createElement('div');
-  card.className = 'vessel-card';
+  card.className = isPending ? 'vessel-card pending-vessel' : 'vessel-card';
   card.innerHTML = `
     <div class="vessel-image-container">
       <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
       ${vessel.only_for_credits ? '<div class="vessel-credits-overlay">$</div>' : ''}
       ${isVesselTypeLocked ? '<div class="vessel-locked-overlay"><div class="vessel-locked-banner">🔒 Locked</div><div class="vessel-locked-text">Unlock ' + vessel.capacity_type + ' vessels first</div></div>' : ''}
+      ${isPending ? `<div class="vessel-time-badge">⏱️ In Delivery ${(() => {
+        const remaining = vessel.time_arrival || 0;
+        if (remaining > 0) {
+          const days = Math.floor(remaining / 86400);
+          const hours = Math.floor((remaining % 86400) / 3600);
+          const minutes = Math.floor((remaining % 3600) / 60);
+          if (days > 0) return `${days}d ${hours}h`;
+          if (hours > 0) return `${hours}h ${minutes}m`;
+          return `${minutes}m`;
+        }
+        return 'Ready';
+      })()}</div>` : ''}
+      ${isPending ? '<button class="vessel-locate-btn vessel-locate-btn-image" data-vessel-id="' + vessel.id + '" title="Show on map" onmouseover="this.querySelector(\'span\').style.animation=\'pulse-arrow 0.6s ease-in-out infinite\'" onmouseout="this.querySelector(\'span\').style.animation=\'none\'"><span>📍</span></button>' : ''}
     </div>
     <div class="vessel-content">
       <div class="vessel-header">
@@ -2865,31 +2812,55 @@ function createVesselCard(vessel) {
         ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${vessel.antifouling}</div>` : ''}
         ${additionalAttrs}
       </div>
-      <div class="vessel-actions">
-        <input type="number" class="vessel-quantity-input" data-vessel-id="${vessel.id}" value="1" min="1" max="99" ${!canPurchase ? 'disabled' : ''} />
-        <div class="vessel-action-buttons">
-          <button class="vessel-select-btn" data-vessel-id="${vessel.id}" ${!canPurchase ? 'disabled title="' + (isVesselTypeLocked ? 'Vessel type locked' : 'Not enough anchor slots') + '"' : ''}>
-            Add to Cart
-          </button>
-          <button class="vessel-buy-btn" data-vessel-id="${vessel.id}" ${!canPurchase ? 'disabled title="' + (isVesselTypeLocked ? 'Vessel type locked' : 'Not enough anchor slots') + '"' : ''}>
-            Buy Now
-          </button>
+      ${!isPending ? `
+        <div class="vessel-actions">
+          <input type="number" class="vessel-quantity-input" data-vessel-id="${vessel.id}" value="1" min="1" max="99" ${!canPurchase ? 'disabled' : ''} />
+          <div class="vessel-action-buttons">
+            <button class="vessel-select-btn" data-vessel-id="${vessel.id}" ${!canPurchase ? 'disabled title="' + (isVesselTypeLocked ? 'Vessel type locked' : 'Not enough anchor slots') + '"' : ''}>
+              Add to Cart
+            </button>
+            <button class="vessel-buy-btn" data-vessel-id="${vessel.id}" ${!canPurchase ? 'disabled title="' + (isVesselTypeLocked ? 'Vessel type locked' : 'Not enough anchor slots') + '"' : ''}>
+              Buy Now
+            </button>
+          </div>
         </div>
-      </div>
+      ` : ''}
     </div>
   `;
 
-  card.querySelector('.vessel-select-btn').addEventListener('click', () => {
-    const quantityInput = card.querySelector('.vessel-quantity-input');
-    const quantity = parseInt(quantityInput.value) || 1;
-    toggleVesselSelection(vessel, quantity);
-    quantityInput.value = 1; // Reset to 1 after adding to cart
-  });
-  card.querySelector('.vessel-buy-btn').addEventListener('click', () => {
-    const quantityInput = card.querySelector('.vessel-quantity-input');
-    const quantity = parseInt(quantityInput.value) || 1;
-    purchaseSingleVessel(vessel, quantity);
-  });
+  // Only add event listeners for acquirable vessels
+  if (!isPending) {
+    card.querySelector('.vessel-select-btn').addEventListener('click', () => {
+      const quantityInput = card.querySelector('.vessel-quantity-input');
+      const quantity = parseInt(quantityInput.value) || 1;
+      toggleVesselSelection(vessel, quantity);
+      quantityInput.value = 1; // Reset to 1 after adding to cart
+    });
+    card.querySelector('.vessel-buy-btn').addEventListener('click', () => {
+      const quantityInput = card.querySelector('.vessel-quantity-input');
+      const quantity = parseInt(quantityInput.value) || 1;
+      purchaseSingleVessel(vessel, quantity);
+    });
+  } else {
+    // For pending vessels, add locate button listener
+    const locateBtn = card.querySelector('.vessel-locate-btn');
+    if (locateBtn) {
+      locateBtn.addEventListener('click', async () => {
+        const vesselId = parseInt(locateBtn.dataset.vesselId);
+
+        // Close buy vessels overlay
+        document.getElementById('buyVesselsOverlay').classList.add('hidden');
+
+        // Open harbor map and select vessel
+        if (window.showHarborMapOverlay) {
+          await window.showHarborMapOverlay();
+        }
+
+        // Select the vessel on map
+        await selectVessel(vesselId);
+      });
+    }
+  }
 
   return card;
 }
@@ -3284,24 +3255,15 @@ function displayFilteredVessels() {
     return;
   }
 
-  feed.innerHTML = '';
-
-  // Show warning if no anchor slots available
-  const availableSlots = getAvailableAnchorSlots();
-  if (availableSlots === 0) {
-    const warning = document.createElement('div');
-    warning.style.cssText = 'background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; color: #fca5a5; font-size: 14px; display: flex; align-items: center; gap: 8px;';
-    warning.innerHTML = '<span style="font-size: 18px;">⚠️</span> <span><strong>No anchor slots available!</strong> All purchase buttons are disabled. Purchase more anchor points.</span>';
-    feed.appendChild(warning);
-  }
-
   if (filteredVessels.length === 0) {
-    feed.innerHTML += '<div style="text-align: center; padding: 40px; color: #9ca3af; font-size: 16px;">No vessels match the selected filters</div>';
+    feed.innerHTML = '<div style="text-align: center; padding: 40px; color: #9ca3af; font-size: 16px;">No vessels match the selected filters</div>';
     return;
   }
 
+  feed.innerHTML = '';
+
   const grid = document.createElement('div');
-  grid.className = 'vessel-catalog-grid';
+  grid.className = filteredVessels.length === 1 ? 'vessel-catalog-grid single-vessel' : 'vessel-catalog-grid';
   grid.id = 'vesselCatalogGrid';
 
   // Disconnect existing observer if any
@@ -3339,6 +3301,17 @@ function displayFilteredVessels() {
   }
 
   feed.appendChild(grid);
+
+  // Adjust window size if only 1 vessel is displayed
+  const buyVesselsOverlay = document.getElementById('buyVesselsOverlay');
+  const messengerWindow = buyVesselsOverlay?.querySelector('.messenger-window');
+  if (messengerWindow) {
+    if (filteredVessels.length === 1) {
+      messengerWindow.classList.add('messenger-window-single-vessel');
+    } else {
+      messengerWindow.classList.remove('messenger-window-single-vessel');
+    }
+  }
 
   if (window.DEBUG_MODE) console.log(`[Filters] Showing ${Math.min(INITIAL_LOAD_COUNT, filteredVessels.length)} of ${filteredVessels.length} vessels (lazy loading enabled)`);
 }

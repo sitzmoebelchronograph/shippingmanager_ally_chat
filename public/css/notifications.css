@@ -1,0 +1,322 @@
+/**
+ * NOTIFICATIONS
+ * Side notifications, global feedback, price alerts
+ *
+ * Dependencies: variables.css
+ */
+
+/* ============================================
+   GLOBAL FEEDBACK - Price Alerts Only (center with spin)
+   ============================================ */
+
+#globalFeedback {
+  position: fixed;
+  top: 33%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-feedback);
+  min-width: 300px;
+  max-width: 500px;
+  display: none;
+}
+
+#globalFeedback.show {
+  display: block;
+  animation: slideDown var(--transition-medium) ease-out;
+}
+
+/* Use spin animation for price alerts - higher specificity */
+#globalFeedback.show.price-alert-container {
+  animation: priceAlertSpin 0.8s var(--ease-bounce) forwards !important;
+}
+
+.global-feedback-message {
+  padding: var(--spacing-20) var(--spacing-30);
+  border-radius: var(--radius-8);
+  font-size: var(--font-size-16);
+  font-weight: var(--font-weight-medium);
+  text-align: center;
+  box-shadow: var(--shadow-2xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-15);
+}
+
+.global-feedback-message.success {
+  background: var(--color-success-darkest);
+  color: var(--color-success-text-light);
+  border: 2px solid var(--color-success);
+}
+
+.global-feedback-message.error {
+  background: var(--color-danger-darkest);
+  color: var(--color-danger-text-light);
+  border: 2px solid var(--color-danger);
+}
+
+.global-feedback-message.warning {
+  background: var(--color-warning-dark);
+  color: var(--color-warning-lighter);
+  border: 2px solid var(--color-warning-light);
+}
+
+.global-feedback-message.info {
+  background: var(--color-success-darkest);
+  color: var(--color-success-text-light);
+  border: 2px solid var(--color-success);
+}
+
+/* ============================================
+   SIDE NOTIFICATIONS - Right-Top Stacking
+   ============================================ */
+
+#sideNotifications {
+  position: fixed;
+  top: var(--spacing-20);
+  right: var(--spacing-20);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-10);
+  max-width: 400px;
+  pointer-events: none;
+}
+
+#sideNotifications > * {
+  pointer-events: auto;
+}
+
+/* Individual side notification */
+.side-notification {
+  padding: var(--spacing-16) var(--spacing-20);
+  border-radius: var(--radius-8);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-medium);
+  box-shadow: var(--shadow-2xl);
+  animation: slideInFromRight var(--transition-medium) ease-out;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  position: relative;
+  width: 250px;
+  max-width: 250px;
+}
+
+.side-notification.success {
+  background: var(--color-success-darkest);
+  color: var(--color-success-text-light);
+  border: 2px solid var(--color-success);
+}
+
+.side-notification.error {
+  background: var(--color-danger-darkest);
+  color: var(--color-danger-text-light);
+  border: 2px solid var(--color-danger);
+}
+
+.side-notification.warning {
+  background: var(--color-warning-dark);
+  color: var(--color-warning-lighter);
+  border: 2px solid var(--color-warning-light);
+}
+
+.side-notification.info {
+  background: var(--color-success-darkest);
+  color: var(--color-success-text-light);
+  border: 2px solid var(--color-success);
+}
+
+/* Alert notifications with megaphone icon and Got it button */
+.side-notification.alert {
+  padding-left: 50px; /* Space for megaphone icon */
+  padding-right: 80px; /* Space for Got it button */
+}
+
+.side-notification.alert::before {
+  content: '📢';
+  position: absolute;
+  left: var(--spacing-16);
+  top: var(--spacing-16);
+  font-size: var(--font-size-24);
+}
+
+.side-notification.alert .got-it-btn {
+  position: absolute;
+  top: var(--spacing-12);
+  right: var(--spacing-12);
+  background: var(--white-20);
+  border: 1px solid var(--white-40);
+  color: var(--color-white);
+  padding: var(--spacing-6) var(--spacing-12);
+  border-radius: var(--radius-4);
+  cursor: pointer;
+  font-size: var(--font-size-12);
+  font-weight: var(--font-weight-semibold);
+  transition: var(--transition-fast);
+}
+
+.side-notification.alert .got-it-btn:hover {
+  background: var(--white-30);
+  border-color: var(--white-60);
+}
+
+/* Close button for normal notifications (non-alert) */
+.side-notification:not(.alert) .close-btn {
+  position: absolute;
+  top: var(--spacing-2);
+  right: var(--spacing-6);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--white-50);
+  font-size: var(--font-size-16);
+  line-height: var(--line-height-tight);
+  padding: var(--spacing-2);
+  transition: color var(--transition-fast);
+}
+
+.side-notification:not(.alert) .close-btn:hover {
+  color: var(--color-danger);
+}
+
+/* Custom scrollbar for long notifications - 1px ultra-thin, color-coded */
+
+/* Standard properties for Firefox */
+.side-notification.success {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-success-darker) var(--color-success-darkest);
+}
+
+.side-notification.error {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-danger-dark) var(--color-danger-darkest);
+}
+
+.side-notification.warning {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-warning) var(--color-warning-dark);
+}
+
+.side-notification.info {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-info) var(--color-info-dark);
+}
+
+/* Webkit browsers (Chrome, Safari, Edge, Opera) - 1px */
+.side-notification::-webkit-scrollbar {
+  width: 1px;
+  height: 1px;
+}
+
+.side-notification.success::-webkit-scrollbar-thumb {
+  background: var(--color-success-darker);
+  border-radius: var(--radius-2);
+}
+
+.side-notification.success::-webkit-scrollbar-track {
+  background: var(--color-success-darkest);
+}
+
+.side-notification.error::-webkit-scrollbar-thumb {
+  background: var(--color-danger-dark);
+  border-radius: var(--radius-2);
+}
+
+.side-notification.error::-webkit-scrollbar-track {
+  background: var(--color-danger-darkest);
+}
+
+.side-notification.warning::-webkit-scrollbar-thumb {
+  background: var(--color-warning);
+  border-radius: var(--radius-2);
+}
+
+.side-notification.warning::-webkit-scrollbar-track {
+  background: var(--color-warning-dark);
+}
+
+.side-notification.info::-webkit-scrollbar-thumb {
+  background: var(--color-info);
+  border-radius: var(--radius-2);
+}
+
+.side-notification.info::-webkit-scrollbar-track {
+  background: var(--color-info-dark);
+}
+
+/* Utility classes */
+.slide-out-animation {
+  animation: slideOutToRight var(--transition-medium) ease-in;
+}
+
+/* ============================================
+   PRICE ALERT NOTIFICATION (Specific)
+   ============================================ */
+
+.price-alert {
+  position: fixed;
+  top: 80px;
+  right: var(--spacing-20);
+  max-width: 400px;
+  background: var(--slate-900-98);
+  border: 2px solid var(--color-warning-light-50);
+  border-radius: var(--radius-12);
+  padding: var(--spacing-20);
+  z-index: var(--z-toast);
+  box-shadow: var(--shadow-2xl), 0 0 20px rgba(251, 191, 36, 0.3);
+  animation: priceAlertSlide var(--anim-duration-fast) ease-out;
+}
+
+.price-alert-success {
+  border-color: var(--color-success-50);
+  box-shadow: var(--shadow-2xl), 0 0 20px rgba(74, 222, 128, 0.3);
+}
+
+.price-alert-warning {
+  border-color: var(--color-warning-light-50);
+  box-shadow: var(--shadow-2xl), 0 0 20px rgba(251, 191, 36, 0.3);
+}
+
+.alert-icon {
+  font-size: var(--font-size-32);
+  margin-bottom: var(--spacing-10);
+  text-align: center;
+}
+
+.alert-message {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-15);
+  line-height: var(--line-height-loose);
+  margin-bottom: var(--spacing-15);
+}
+
+.alert-dismiss {
+  width: 100%;
+  padding: var(--spacing-10);
+  background: var(--color-info-20);
+  border: 1px solid var(--color-info-50);
+  border-radius: var(--radius-6);
+  color: var(--color-info-light);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.alert-dismiss:hover {
+  background: var(--color-info-30);
+  border-color: var(--color-info-70);
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.fade-out {
+  transition: opacity var(--transition-slow);
+  opacity: 0;
+}
+
+.hidden {
+  display: none !important;
+}

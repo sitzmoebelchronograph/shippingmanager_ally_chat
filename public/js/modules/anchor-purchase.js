@@ -141,9 +141,11 @@ export async function showAnchorPurchaseDialog() {
       // Get Purchase button reference
       const purchaseBtn = overlay.querySelector('#anchorPurchaseBtn');
 
+      // Get anchor badge reference (needed for both function and observer)
+      const anchorBadge = document.getElementById('anchorCount');
+
       // Function to update info section based on current badge
       function updateInfoSection() {
-        const anchorBadge = document.getElementById('anchorCount');
         const vesselsAtAnchor = parseInt(anchorBadge?.textContent) || 0;
         const infoSection = document.getElementById('anchorInfoSection');
 

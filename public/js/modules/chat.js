@@ -29,7 +29,7 @@
  */
 
 import { escapeHtml, showSideNotification, handleNotifications, showNotification, formatNumber, showChatNotification } from './utils.js';
-import { getCompanyNameCached, fetchChat, sendChatMessage, fetchAllianceMembers } from './api.js';
+import { getCompanyNameCached, fetchChat, sendChatMessage, fetchAllianceMembers, invalidateVesselCache } from './api.js';
 import { updateEventDiscount } from './forecast-calendar.js';
 import { updateEventData } from './event-info.js';
 import { lockRepairButton, unlockRepairButton, lockBulkBuyButton, unlockBulkBuyButton, lockFuelButton, unlockFuelButton, lockCo2Button, unlockCo2Button, lockDrydockButton, unlockDrydockButton, updateLockStateFromServer } from './vessel-management.js';
@@ -1507,6 +1507,9 @@ async function handleVesselsDeparted(data) {
 
   console.log(`[Autopilot] Vessels departed: ${count} vessels - Income: $${totalIncome.toLocaleString()}`);
 
+  // Invalidate vessel cache since vessel data changed
+  invalidateVesselCache('owned');
+
   // Create compact vessel list
   const vesselList = vessels.map(v =>
     `<div style="font-size: 0.8em; opacity: 0.85; padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,0.08);">
@@ -1617,6 +1620,9 @@ async function handleVesselsRepaired(data) {
   const { count, totalCost, vessels } = data;
 
   console.log(`[Autopilot] Vessels repaired: ${count} vessels - Cost: $${totalCost.toLocaleString()}`);
+
+  // Invalidate vessel cache since vessel data changed
+  invalidateVesselCache('owned');
 
   // Build vessel list similar to depart notification
   let contentHTML = '';
@@ -2079,6 +2085,10 @@ function handleBunkerUpdate(data) {
 function handleVesselCountUpdate(data) {
   const { readyToDepart, atAnchor, pending } = data;
   updateDataCache.vessels = { ready: readyToDepart, anchor: atAnchor, pending };
+
+  // Invalidate vessel cache on count changes (vessels arrived, departed, etc.)
+  invalidateVesselCache('owned');
+
   if (AUTOPILOT_LOG_LEVEL === 'detailed') {
     console.log(`[Autopilot] Vessel count update: Ready=${readyToDepart}, Anchor=${atAnchor}, Pending=${pending}`);
   }
@@ -2446,10 +2456,8 @@ function handleCompanyTypeUpdate(data) {
     sellTankerBtn.classList.remove('hidden');
   }
 
-  // Refresh vessel cards if catalog is open
-  if (window.refreshVesselCardsIfVisible) {
-    window.refreshVesselCardsIfVisible();
-  }
+  // NOTE: Removed auto-refresh of vessel cards - overlays should not be auto-refreshed
+  // Vessel catalog will update when user reopens it
 }
 
 /**
@@ -2536,10 +2544,8 @@ function handleHeaderDataUpdate(data) {
       anchorSlotsDisplay.innerHTML = html;
     }
 
-    // Refresh vessel purchase buttons if anchor slots changed
-    if (window.refreshVesselCardsIfVisible) {
-      window.refreshVesselCardsIfVisible();
-    }
+    // NOTE: Removed auto-refresh of vessel cards - overlays should not be auto-refreshed
+    // Vessel catalog will update when user reopens it
   }
 
   // Cache for next page load

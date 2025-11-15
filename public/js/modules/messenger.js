@@ -478,7 +478,11 @@ async function displaySystemMessage(chat) {
   feed.innerHTML = '';
 
   const bubble = document.createElement('div');
-  bubble.className = 'message-bubble system message-bubble-system';
+  if (chat.body === 'vessel_got_hijacked') {
+    bubble.className = 'message-bubble hijacking';
+  } else {
+    bubble.className = 'message-bubble system message-bubble-system';
+  }
 
   const timestamp = formatTimestamp(chat.time_last_message);
 
@@ -679,23 +683,24 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
     // Build negotiation history HTML
     if (negotiationHistory.length > 0) {
       negotiationHistoryHTML = `
-        <div style="margin: 12px -15px 0 -15px; padding: 10px 15px; background: rgba(156, 163, 175, 0.1); border-radius: 4px; width: calc(100% + 30px);">
-          <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: #9ca3af;">📝 Negotiation History:</div>
-          <div style="font-size: 12px; line-height: 1.6;">
+        <div class="hijacking-history-box">
+          <div class="hijacking-history-title">📝 Negotiation History:</div>
+          <div class="hijacking-history-content">
       `;
 
       negotiationHistory.forEach((offer) => {
         const isUserOffer = offer.type === 'user';
         const amount = offer.amount;
+        const colorClass = isUserOffer ? 'hijacking-history-user' : 'hijacking-history-pirate';
 
         negotiationHistoryHTML += `
-          <div style="display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(156, 163, 175, 0.2);">
-            <span style="color: ${isUserOffer ? '#60a5fa' : '#ef4444'};">
+          <div class="hijacking-history-item">
+            <span class="${colorClass}">
               ${isUserOffer ? '👤 You offered' : '☠️ Pirates demanded'}:
             </span>
-            <span style="font-weight: bold; color: ${isUserOffer ? '#60a5fa' : '#ef4444'};">
+            <strong class="${colorClass}">
               $${amount.toLocaleString()}
-            </span>
+            </strong>
           </div>
         `;
       });
@@ -757,21 +762,27 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
           `;
         }
       } else {
-        // No verification data (old case before verification system) - show Blackbeard signature as before
-        verificationHTML = `
-          <div style="position: absolute; right: -8px; top: calc(35% + 50px); transform: translateY(-50%); text-align: right;">
-            <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
-              Blackbeard
+        // No verification data - check autopilot_resolved flag
+        if (autopilotResolved) {
+          // Autopilot resolved without verification data (old case)
+          verificationHTML = `
+            <div style="position: absolute; right: -8px; top: calc(35% + 50px); transform: translateY(-50%); text-align: right;">
+              <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
+                Blackbeard
+              </div>
             </div>
-          </div>
-        `;
+          `;
+        } else {
+          // Manual resolution without verification data
+          verificationHTML = '';
+        }
       }
 
       actionsHTML = `
         ${negotiationHistoryHTML}
-        <div style="margin-top: 16px; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 4px; position: relative;">
-          <div style="color: #4ade80; font-weight: bold;">✓ Case Resolved</div>
-          <div style="margin-top: 8px;">
+        <div class="hijacking-resolved-box">
+          <div class="hijacking-resolved-title">✓ Case Resolved</div>
+          <div class="hijacking-resolved-amount">
             Final Amount Paid: <strong>$${finalAmount.toLocaleString()}</strong>
           </div>
           ${verificationHTML}
@@ -790,9 +801,11 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
         `;
       }
 
-      // CRITICAL: Stop negotiating if price is under $20,000
-      // Below this threshold, accept the deal - you've reached a good price!
-      const canNegotiate = requestedAmount >= 20000;
+      // CRITICAL: Stop negotiating if price is under $20,000 OR if user has made 2+ offers
+      // Below $20k threshold, accept the deal - you've reached a good price!
+      // After 2 offers, must accept or risk game bug (pays full initial price on 3rd offer)
+      const userOfferCount = negotiationHistory.filter(h => h.type === 'user').length;
+      const canNegotiate = requestedAmount >= 20000 && userOfferCount < 2;
 
       if (canNegotiate) {
         actionsHTML = `
@@ -805,9 +818,9 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
           <div id="hijacking-negotiate-${caseId}" style="display: none; margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
             <div style="margin-bottom: 12px; font-weight: bold; text-align: center;">Choose your counter-offer:</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
-              <button class="hijacking-offer-btn" data-case-id="${caseId}" data-fixed-amount="20000">
-                <div style="font-weight: bold; margin-bottom: 4px;">A Copper Jot</div>
-                <div style="font-size: 11px; opacity: 0.8;">$20,000</div>
+              <button class="hijacking-offer-btn" data-case-id="${caseId}" data-fixed-amount="1">
+                <div style="font-weight: bold; margin-bottom: 4px;">A Copper Pot</div>
+                <div style="font-size: 11px; opacity: 0.8;">$1</div>
               </button>
               <button class="hijacking-offer-btn" data-case-id="${caseId}" data-percentage="0.25">
                 <div style="font-weight: bold; margin-bottom: 4px;">A Tattered Patch</div>
@@ -832,28 +845,46 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
           </div>
         `;
       } else {
-        // Price is under $20,000 - only allow accept, no more negotiation
-        actionsHTML = `
-          ${statusHTML}
-          ${negotiationHistoryHTML}
-          <div style="margin-top: 12px; padding: 12px; background: rgba(34, 197, 94, 0.1); border-left: 3px solid #4ade80; border-radius: 4px; position: relative;">
-            <div style="font-size: 13px; font-weight: bold; color: #4ade80; margin-bottom: 8px;">
-              ☠️ Goal achieved, won't get cheaper. Give them the few bucks
+        // Price is under $20,000 OR user has made 3+ offers - only allow accept, no more negotiation
+        const maxOffersReached = userOfferCount >= 2;
+
+        if (maxOffersReached) {
+          // After 3 offers: Show critical warning about game bug
+          actionsHTML = `
+            ${statusHTML}
+            ${negotiationHistoryHTML}
+            <div style="margin-top: 12px; padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; text-align: center;">
+              <div style="font-size: 14px; font-weight: bold; color: #ef4444; margin-bottom: 4px;">⚠️ Maximum Offers Reached</div>
+              <div style="font-size: 12px; color: #9ca3af;">You must accept or risk paying the full initial ransom</div>
             </div>
-            <div style="font-size: 12px; opacity: 0.8; font-style: italic; margin-top: 8px; color: #6b7280;">
-              "If you were waiting for the opportune moment, that was it."<br>
-              — Captain Blackbeard
+            <div id="hijacking-actions-${caseId}" style="margin-top: 16px;">
+              <button class="btn-primary" onclick="window.acceptHijackingPrice(${caseId}, ${requestedAmount})" style="width: 100%; padding: 12px; background: #10b981; border: none; color: white; border-radius: 6px; cursor: pointer; font-weight: 500;">Accept Price ($${requestedAmount.toLocaleString()})</button>
             </div>
-            <div style="position: absolute; right: -8px; top: calc(50% - 10px); transform: translateY(-50%); text-align: right;">
-              <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
-                Blackbeard
+          `;
+        } else {
+          // Price is under $20,000 - show Blackbeard message
+          actionsHTML = `
+            ${statusHTML}
+            ${negotiationHistoryHTML}
+            <div style="margin-top: 12px; padding: 12px; background: rgba(34, 197, 94, 0.1); border-left: 3px solid #4ade80; border-radius: 4px; position: relative;">
+              <div style="font-size: 13px; font-weight: bold; color: #4ade80; margin-bottom: 8px;">
+                ☠️ Goal achieved, won't get cheaper. Give them the few bucks
+              </div>
+              <div style="font-size: 12px; opacity: 0.8; font-style: italic; margin-top: 8px; color: #6b7280;">
+                "If you were waiting for the opportune moment, that was it."<br>
+                — Captain Blackbeard
+              </div>
+              <div style="position: absolute; right: -8px; top: calc(50% - 10px); transform: translateY(-50%); text-align: right;">
+                <div style="font-family: 'Segoe Script', 'Lucida Handwriting', 'Brush Script MT', cursive; font-size: 24px; font-weight: 900; color: #8b4513; opacity: 0.7; transform: rotate(-15deg); letter-spacing: 1px;">
+                  Blackbeard
+                </div>
               </div>
             </div>
-          </div>
-          <div id="hijacking-actions-${caseId}" style="margin-top: 16px;">
-            <button class="btn-primary" onclick="window.acceptHijackingPrice(${caseId}, ${requestedAmount})" style="padding: 12px 24px; background: #4ade80; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">Pay Ransom ($${requestedAmount.toLocaleString()})</button>
-          </div>
-        `;
+            <div id="hijacking-actions-${caseId}" style="margin-top: 16px;">
+              <button class="btn-primary" onclick="window.acceptHijackingPrice(${caseId}, ${requestedAmount})" style="padding: 12px 24px; background: #4ade80; border: none; color: white; border-radius: 4px; cursor: pointer; font-weight: bold;">Pay Ransom ($${requestedAmount.toLocaleString()})</button>
+            </div>
+          `;
+        }
       }
     }
 
@@ -867,12 +898,14 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
       .join(' ');
 
     return `
-      <div style="color: #ef4444; font-weight: bold;">☠️ Vessel Hijacked!</div>
-      <div style="margin-top: 8px;">
-        <strong>Vessel:</strong> ${escapeHtml(v.vessel_name)}<br>
-        <strong>Location:</strong> ${escapeHtml(formattedLocation)}<br>
-        <strong>Ransom Demand:</strong> $${originalDemand.toLocaleString()}<br>
-        <strong>Case ID:</strong> ${caseId || 'N/A'}
+      <div class="hijacking-info-box">
+        <div class="hijacking-info-title">☠️ Vessel Hijacked!</div>
+        <div class="hijacking-info-details">
+          <strong>Vessel:</strong> ${escapeHtml(v.vessel_name)}<br>
+          <strong>Location:</strong> ${escapeHtml(formattedLocation)}<br>
+          <strong>Ransom Demand:</strong> $${originalDemand.toLocaleString()}<br>
+          <strong>Case ID:</strong> ${caseId || 'N/A'}
+        </div>
       </div>
       ${actionsHTML}
     `;
@@ -1625,12 +1658,25 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
         timestamp: Date.now() / 1000
       });
 
-      // Save updated history (preserve autopilot_resolved flag if exists)
-      const dataToSave = historyData.autopilot_resolved ? {
-        history: negotiationHistory,
-        autopilot_resolved: historyData.autopilot_resolved,
-        resolved_at: historyData.resolved_at
-      } : { history: negotiationHistory };
+      // Save updated history (preserve ALL existing metadata fields)
+      const dataToSave = {
+        history: negotiationHistory
+      };
+
+      // Preserve autopilot_resolved if it exists
+      if (historyData.autopilot_resolved !== undefined) {
+        dataToSave.autopilot_resolved = historyData.autopilot_resolved;
+      }
+
+      // Preserve resolved_at if it exists
+      if (historyData.resolved_at) {
+        dataToSave.resolved_at = historyData.resolved_at;
+      }
+
+      // Preserve payment_verification if it exists
+      if (historyData.payment_verification) {
+        dataToSave.payment_verification = historyData.payment_verification;
+      }
 
       await fetch(`/api/hijacking/history/${caseId}`, {
         method: 'POST',
@@ -1656,10 +1702,11 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
     }
 
     // Save pirate counter-offer to history
+    let negotiationHistory = [];
     try {
       const historyResponse = await fetch(`/api/hijacking/history/${caseId}`);
       const historyData = await historyResponse.json();
-      const negotiationHistory = historyData.history || [];
+      negotiationHistory = historyData.history || [];
 
       negotiationHistory.push({
         type: 'pirate',
@@ -1667,10 +1714,30 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
         timestamp: Date.now() / 1000
       });
 
+      // Save updated history (preserve ALL existing metadata fields)
+      const dataToSave = {
+        history: negotiationHistory
+      };
+
+      // Preserve autopilot_resolved if it exists
+      if (historyData.autopilot_resolved !== undefined) {
+        dataToSave.autopilot_resolved = historyData.autopilot_resolved;
+      }
+
+      // Preserve resolved_at if it exists
+      if (historyData.resolved_at) {
+        dataToSave.resolved_at = historyData.resolved_at;
+      }
+
+      // Preserve payment_verification if it exists
+      if (historyData.payment_verification) {
+        dataToSave.payment_verification = historyData.payment_verification;
+      }
+
       await fetch(`/api/hijacking/history/${caseId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: negotiationHistory })
+        body: JSON.stringify(dataToSave)
       });
 
       console.log('[Hijacking] Pirate counter-offer saved to history:', pirateCounterOffer);
@@ -1678,12 +1745,15 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
       console.error('[Hijacking] Failed to save pirate counter-offer to history:', error);
     }
 
-    // Count how many user offers have been made (max 3 before auto-accept bug)
+    // Count how many user offers have been made (max 2 before auto-accept bug on 3rd)
     const userOfferCount = negotiationHistory.filter(h => h.type === 'user').length;
     console.log('[Hijacking] User has made', userOfferCount, 'offers');
 
-    // Show new counter-offer UI immediately (no waiting!)
-    showCounterOfferUI(caseId, pirateCounterOffer, userOfferCount);
+    // Reload the hijacking message to show updated negotiation history
+    // displaySystemMessage already renders everything correctly, no need for showCounterOfferUI
+    if (currentPrivateChat && currentPrivateChat.body === 'vessel_got_hijacked') {
+      await displaySystemMessage(currentPrivateChat);
+    }
 
     // Show notification about pirate response
     showSideNotification(`☠️ Pirates counter-offered: $${pirateCounterOffer.toLocaleString()}`, 'warning', 6000);
@@ -1706,15 +1776,15 @@ window.proposeHijackingPrice = async function(caseId, requestedAmount) {
  * Shows the counter-offer UI after pirate response
  * @param {number} caseId - Hijacking case ID
  * @param {number} newAmount - New requested amount from pirates
- * @param {number} userOfferCount - How many offers user has made (max 3)
+ * @param {number} userOfferCount - How many offers user has made (max 2)
  */
 function showCounterOfferUI(caseId, newAmount, userOfferCount = 0) {
   const actionsDiv = document.getElementById(`hijacking-actions-${caseId}`);
   const negotiateDiv = document.getElementById(`hijacking-negotiate-${caseId}`);
   if (!actionsDiv) return;
 
-  // After 3 user offers: Only accept (game bug pays full initial price after 3rd offer)
-  if (userOfferCount >= 3) {
+  // After 2 user offers: Only accept (game bug pays full initial price on 3rd offer)
+  if (userOfferCount >= 2) {
     actionsDiv.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 8px;">
         <div style="padding: 12px; background: rgba(239, 68, 68, 0.1); border-radius: 8px; text-align: center; margin-bottom: 8px;">
