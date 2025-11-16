@@ -138,6 +138,95 @@
   padding-right: var(--spacing-20);
 }
 
+/* CEO Level Badge */
+.ceo-level-container {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-6);
+}
+
+.ceo-level-badge {
+  position: relative;
+  display: inline-block;
+  width: 35px;
+  height: 35px;
+}
+
+.ceo-level-badge__svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4));
+  overflow: visible;
+}
+
+.ceo-level-badge__fill {
+  transition: width 0.3s ease;
+}
+
+.ceo-level-badge__number {
+  position: absolute;
+  top: calc(50% + 1px);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: var(--font-size-14);
+  font-weight: var(--font-weight-black);
+  color: var(--color-white);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Unified header info items */
+.header-info-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+}
+
+.header-info-icon {
+  font-size: var(--font-size-15);
+  line-height: 1;
+}
+
+.header-info-value {
+  font-size: var(--font-size-13);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+}
+
+.header-info-trend {
+  font-size: var(--font-size-13);
+  line-height: 1;
+}
+
+/* Type-specific colors */
+.header-info-points .header-info-icon,
+.header-info-points .header-info-value {
+  color: var(--color-warning-light);
+}
+
+.header-info-cash .header-info-icon,
+.header-info-cash .header-info-value {
+  color: var(--color-success);
+}
+
+.header-info-coop .header-info-value,
+.header-info-anchor .header-info-value {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.header-info-campaigns .header-info-value {
+  /* Campaigns color changes dynamically based on count */
+}
+
+.header-info-stock .header-info-value {
+  font-weight: var(--font-weight-medium);
+}
+
+.header-info-hijacked .header-info-icon,
+.header-info-hijacked .header-info-value {
+  /* Hijacked can have dynamic colors */
+}
+
 /* ============================================
    ACTION BAR
    ============================================ */

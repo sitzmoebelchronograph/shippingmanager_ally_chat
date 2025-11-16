@@ -1720,7 +1720,7 @@ export function renderPorts(ports) {
 export function drawRoute(route, ports = [], autoZoom = true) {
   routeLayer.clearLayers();
 
-  if (!route || !route.path || route.path.length === 0) {
+  if (!route) {
     console.log('[Harbor Map] No route to draw');
     return;
   }
@@ -1729,14 +1729,41 @@ export function drawRoute(route, ports = [], autoZoom = true) {
   const originPort = route.origin || route.origin_port_code;
   const destinationPort = route.destination || route.destination_port_code;
 
+  if (!originPort || !destinationPort) {
+    console.log('[Harbor Map] No origin or destination for route');
+    return;
+  }
+
   console.log('[Harbor Map] Drawing route:', {
     origin: originPort,
     destination: destinationPort,
-    pathLength: route.path.length
+    pathLength: route.path ? route.path.length : 0
   });
 
+  // Build path - use provided path or create straight line from port coordinates
+  let latLngs = [];
+
+  if (route.path && route.path.length > 0) {
+    // Use the detailed path from API
+    latLngs = route.path.map(p => [p.lat, p.lon]);
+  } else {
+    // No detailed path - create straight line between origin and destination ports
+    const originPortData = ports.find(p => p.code === originPort);
+    const destPortData = ports.find(p => p.code === destinationPort);
+
+    if (originPortData && destPortData) {
+      console.log('[Harbor Map] Creating straight line route between ports:', originPort, '→', destinationPort);
+      latLngs = [
+        [parseFloat(originPortData.lat), parseFloat(originPortData.lon)],
+        [parseFloat(destPortData.lat), parseFloat(destPortData.lon)]
+      ];
+    } else {
+      console.warn('[Harbor Map] Cannot draw route - port coordinates not found');
+      return;
+    }
+  }
+
   // Draw route path as blue polyline
-  const latLngs = route.path.map(p => [p.lat, p.lon]);
   const polyline = L.polyline(latLngs, {
     color: '#3388ff',
     weight: 3,
@@ -1868,21 +1895,28 @@ export function drawRoute(route, ports = [], autoZoom = true) {
 
   // Fit map to route bounds (only if autoZoom is true)
   if (autoZoom) {
-    const isMobile = isMobileDevice();
+    const polylineBounds = polyline.getBounds();
 
-    if (isMobile) {
-      // Mobile: More padding and maxZoom to see full route
-      map.fitBounds(polyline.getBounds(), {
-        paddingTopLeft: [20, 80],
-        paddingBottomRight: [20, 450],
-        maxZoom: 2 // Allow very wide zoom out for intercontinental routes
-      });
+    // Only zoom if bounds are valid
+    if (polylineBounds && polylineBounds.isValid()) {
+      const isMobile = isMobileDevice();
+
+      if (isMobile) {
+        // Mobile: More padding and maxZoom to see full route
+        map.fitBounds(polylineBounds, {
+          paddingTopLeft: [20, 80],
+          paddingBottomRight: [20, 450],
+          maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+        });
+      } else {
+        // Desktop: Right panel padding (175px panel + 50px extra + more space)
+        map.fitBounds(polylineBounds, {
+          paddingTopLeft: [50, 50],
+          paddingBottomRight: [300, 50]
+        });
+      }
     } else {
-      // Desktop: Right panel padding (175px panel + 50px extra + more space)
-      map.fitBounds(polyline.getBounds(), {
-        paddingTopLeft: [50, 50],
-        paddingBottomRight: [300, 50]
-      });
+      console.warn('[Harbor Map] Polyline bounds are not valid, skipping auto-zoom');
     }
   }
 }
@@ -2203,7 +2237,18 @@ export async function selectVessel(vesselId) {
       return;
     }
 
-    console.log(`[Harbor Map] Vessel ${vesselId} selected - showing immediately from cache`);
+    console.log(`[Harbor Map] Vessel ${vesselId} selected - showing immediately from cache`, {
+      vesselName: vessel.name,
+      status: vessel.status,
+      hasActiveRoute: !!vessel.active_route,
+      hasRoutesArray: !!(vessel.routes && vessel.routes.length > 0),
+      activeRoutePathLength: vessel.active_route?.path?.length || 0,
+      routesArrayPathLength: vessel.routes?.[0]?.path?.length || 0,
+      routeOrigin: vessel.active_route?.origin || vessel.routes?.[0]?.origin || vessel.route_origin,
+      routeDestination: vessel.active_route?.destination || vessel.routes?.[0]?.destination || vessel.route_destination,
+      routeName: vessel.route_name,
+      shouldShowRoute: vessel.status === 'enroute'
+    });
 
     // Close all panels first to avoid conflicts
     await closeAllPanels();
@@ -2212,6 +2257,27 @@ export async function selectVessel(vesselId) {
     vesselClusterGroup.clearLayers();
     portLocationClusterGroup.clearLayers();
     clearRoute();
+
+    // If vessel has any route data in cache, draw it immediately
+    let cachedRoute = null;
+
+    // Check for route in different possible locations
+    if (vessel.active_route && vessel.active_route.path && vessel.active_route.path.length > 0) {
+      cachedRoute = vessel.active_route;
+    } else if (vessel.routes && vessel.routes[0] && vessel.routes[0].path && vessel.routes[0].path.length > 0) {
+      cachedRoute = vessel.routes[0];
+    }
+
+    // If we found a route, draw it immediately (regardless of status - let the data decide)
+    if (cachedRoute) {
+      console.log(`[Harbor Map] Drawing cached route immediately for vessel ${vesselId}:`, {
+        vesselStatus: vessel.status,
+        pathPoints: cachedRoute.path.length,
+        origin: cachedRoute.origin || vessel.route_origin,
+        destination: cachedRoute.destination || vessel.route_destination
+      });
+      drawRoute(cachedRoute, currentPorts, false);
+    }
 
     // Render ONLY the selected vessel on the map (from cache)
     if (vessel && vessel.position) {
@@ -2250,31 +2316,128 @@ export async function selectVessel(vesselId) {
     showVesselPanel(vessel);
 
     // NOW fetch reachable ports in background
-    console.log(`[Harbor Map] Loading reachable ports in background...`);
-    const data = await fetchVesselReachablePorts(vesselId);
+    console.log(`[Harbor Map] Loading reachable ports in background for vessel ${vesselId}...`);
+    let data = null;
+    try {
+      data = await fetchVesselReachablePorts(vesselId);
+      console.log(`[Harbor Map] Reachable ports loaded:`, {
+        vesselId,
+        vesselStatus: vessel.status,
+        reachablePorts: data.reachablePorts ? data.reachablePorts.length : 0,
+        hasRoute: !!data.route,
+        routeOrigin: data.route?.origin,
+        routeDestination: data.route?.destination,
+        routePathLength: data.route?.path?.length || 0,
+        fullRouteData: data.route ? {
+          origin: data.route.origin,
+          destination: data.route.destination,
+          hasPath: !!data.route.path,
+          pathLength: data.route.path?.length
+        } : null
+      });
+    } catch (error) {
+      console.error(`[Harbor Map] Failed to fetch reachable ports for vessel ${vesselId}:`, error);
+      // Try to show route from cached vessel data if available
+      let fallbackRoute = null;
+      if (vessel.active_route && vessel.active_route.path) {
+        fallbackRoute = vessel.active_route;
+      } else if (vessel.routes && vessel.routes[0] && vessel.routes[0].path) {
+        fallbackRoute = vessel.routes[0];
+      }
 
-    console.log(`[Harbor Map] Reachable ports loaded:`, {
-      reachablePorts: data.reachablePorts.length,
-      hasRoute: !!data.route
-    });
+      if (fallbackRoute) {
+        console.log(`[Harbor Map] Using cached route data from vessel as fallback`);
+        data = {
+          vessel,
+          reachablePorts: [],
+          route: fallbackRoute
+        };
+      } else if (vessel.status !== 'enroute') {
+        // No route needed for vessels not enroute
+        data = {
+          vessel,
+          reachablePorts: [],
+          route: null
+        };
+      } else {
+        console.warn(`[Harbor Map] No route data available for enroute vessel ${vesselId}`);
+        return; // Exit only if vessel is enroute but has no route data
+      }
+    }
 
     // Update map with reachable ports and route data
 
     // Draw route if vessel has one (this will draw the 2 port markers)
     // drawRoute() draws: blue line + red origin marker + green destination marker
-    if (data.route) {
+    if (data && data.route && data.route.path && data.route.path.length > 0) {
+      console.log(`[Harbor Map] Drawing route from API for vessel ${vesselId}:`, {
+        vesselStatus: vessel.status,
+        pathPoints: data.route.path.length,
+        origin: data.route.origin,
+        destination: data.route.destination
+      });
       // Prefer assignedPorts (correct demand) over allPorts (no demand for non-assigned)
-      const portsForDemand = data.assignedPorts || data.allPorts;
+      const portsForDemand = data.assignedPorts || data.allPorts || currentPorts;
       drawRoute(data.route, portsForDemand, false); // false = no auto-zoom
-    } else if ((data.vessel.status === 'port' || data.vessel.status === 'anchor') && data.vessel.port_code) {
-      // If vessel in port but no route: show ONLY current port
-      console.log('[Harbor Map] Vessel in port (no route), showing only current port:', data.vessel.port_code);
+    } else if (data && (data.vessel.status === 'port' || data.vessel.status === 'anchor')) {
+      // Vessel in port - try to show assigned route if available
+      console.log('[Harbor Map] Vessel in port, checking for assigned route...', {
+        hasRoute: !!data.route,
+        routeOrigin: data.route?.origin,
+        routeDestination: data.route?.destination,
+        routePathLength: data.route?.path?.length || 0,
+        reachablePortsCount: data.reachablePorts?.length || 0,
+        currentPort: data.vessel.port_code
+      });
 
-      const currentPort = data.reachablePorts.find(p => p.code === data.vessel.port_code) ||
-                         currentPorts.find(p => p.code === data.vessel.port_code);
+      // Check if we have route data with origin and destination
+      if (data.route && (data.route.origin || data.route.origin_port_code) && (data.route.destination || data.route.destination_port_code)) {
+        const routeOrigin = data.route.origin || data.route.origin_port_code;
+        const routeDestination = data.route.destination || data.route.destination_port_code;
 
-      if (currentPort) {
-        renderPorts([currentPort]); // Only render the ONE port vessel is currently in
+        console.log(`[Harbor Map] Drawing route for vessel in port: ${routeOrigin} → ${routeDestination}`);
+
+        // Get port data for drawing - use allPorts/assignedPorts or current map ports
+        const portsForRoute = data.assignedPorts || data.allPorts || currentPorts || rawPorts;
+
+        // Draw the route
+        drawRoute(data.route, portsForRoute, false); // false = no auto-zoom
+
+        // Also render the two route ports
+        const originPortData = portsForRoute.find(p => p.code === routeOrigin);
+        const destPortData = portsForRoute.find(p => p.code === routeDestination);
+        const routePorts = [originPortData, destPortData].filter(Boolean);
+
+        if (routePorts.length > 0) {
+          renderPorts(routePorts);
+        }
+      } else if (data.reachablePorts && data.reachablePorts.length >= 2 && data.vessel.port_code) {
+        // Fallback: If we have reachable ports (usually 2 for assigned route), create a route
+        const currentPortCode = data.vessel.port_code;
+        const otherPort = data.reachablePorts.find(p => p.code !== currentPortCode);
+
+        if (otherPort) {
+          console.log(`[Harbor Map] Creating route from reachable ports: ${currentPortCode} → ${otherPort.code}`);
+
+          const routeToShow = {
+            origin: currentPortCode,
+            destination: otherPort.code,
+            path: [] // Will draw straight line
+          };
+
+          drawRoute(routeToShow, data.reachablePorts, false);
+          renderPorts(data.reachablePorts);
+        }
+      } else if (data.vessel.port_code) {
+        // No assigned route - just show current port
+        console.log('[Harbor Map] Vessel in port with no assigned route, showing only current port:', data.vessel.port_code);
+
+        const currentPort = data.reachablePorts?.find(p => p.code === data.vessel.port_code) ||
+                           currentPorts.find(p => p.code === data.vessel.port_code);
+
+        if (currentPort) {
+          renderPorts([currentPort]);
+        }
       }
     }
     // If no route and not in port: show nothing (just the vessel)
@@ -2282,42 +2445,56 @@ export async function selectVessel(vesselId) {
     // Zoom to show route (prioritize route over all ports)
     const isMobile = isMobileDevice();
 
-    if (data.route && data.route.path) {
+    if (data.route && data.route.path && data.route.path.length > 0) {
       const bounds = L.latLngBounds();
-      data.route.path.forEach(p => bounds.extend([p.lat, p.lon]));
+      data.route.path.forEach(p => {
+        if (p && p.lat && p.lon) {
+          bounds.extend([p.lat, p.lon]);
+        }
+      });
 
-      if (isMobile) {
-        map.fitBounds(bounds, {
-          paddingTopLeft: [20, 80],
-          paddingBottomRight: [20, 450],
-          maxZoom: 2 // Allow very wide zoom out for intercontinental routes
-        });
+      // Only fit bounds if they are valid (have at least one point)
+      if (bounds.isValid()) {
+        if (isMobile) {
+          map.fitBounds(bounds, {
+            paddingTopLeft: [20, 80],
+            paddingBottomRight: [20, 450],
+            maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+          });
+        } else {
+          map.fitBounds(bounds, {
+            paddingTopLeft: [50, 50],
+            paddingBottomRight: [300, 50] // More padding for panel + dragging space
+          });
+        }
       } else {
-        map.fitBounds(bounds, {
-          paddingTopLeft: [50, 50],
-          paddingBottomRight: [300, 50] // More padding for panel + dragging space
-        });
+        console.warn('[Harbor Map] Route bounds are not valid, skipping zoom');
       }
-    } else if (data.reachablePorts.length > 0) {
+    } else if (data.reachablePorts && data.reachablePorts.length > 0) {
       // Fallback: fit all reachable ports if no route
       const bounds = L.latLngBounds();
       data.reachablePorts.forEach(port => {
-        if (port.lat && port.lon) {
+        if (port && port.lat && port.lon) {
           bounds.extend([parseFloat(port.lat), parseFloat(port.lon)]);
         }
       });
 
-      if (isMobile) {
-        map.fitBounds(bounds, {
-          paddingTopLeft: [20, 80],
-          paddingBottomRight: [20, 450],
-          maxZoom: 2 // Allow very wide zoom out for intercontinental routes
-        });
+      // Only fit bounds if they are valid (have at least one point)
+      if (bounds.isValid()) {
+        if (isMobile) {
+          map.fitBounds(bounds, {
+            paddingTopLeft: [20, 80],
+            paddingBottomRight: [20, 450],
+            maxZoom: 2 // Allow very wide zoom out for intercontinental routes
+          });
+        } else {
+          map.fitBounds(bounds, {
+            paddingTopLeft: [50, 50],
+            paddingBottomRight: [300, 50] // More padding for panel + dragging space
+          });
+        }
       } else {
-        map.fitBounds(bounds, {
-          paddingTopLeft: [50, 50],
-          paddingBottomRight: [300, 50] // More padding for panel + dragging space
-        });
+        console.warn('[Harbor Map] Reachable ports bounds are not valid, skipping zoom');
       }
     } else if (data.vessel && data.vessel.position) {
       // Fallback: center on vessel if no route or ports

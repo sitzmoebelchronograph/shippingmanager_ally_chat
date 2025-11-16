@@ -22,7 +22,7 @@
  * @requires ui-dialogs - Confirmation dialogs for purchases
  */
 
-import { formatNumber, showSideNotification } from './utils.js';
+import { formatNumber, showSideNotification, getFuelPriceClass, getCO2PriceClass } from './utils.js';
 import { fetchBunkerPrices, purchaseFuel as apiPurchaseFuel, purchaseCO2 as apiPurchaseCO2 } from './api.js';
 import { showConfirmDialog } from './ui-dialogs.js';
 
@@ -187,15 +187,15 @@ export async function updateBunkerStatus(settings) {
 
     if (maxFuel > 0) {
       // currentFuel can be 0 (empty tank) - that's fine, we still show it
-      fuelDisplay.innerHTML = `${formatNumber(Math.floor(currentFuel))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxFuel))} <b>t</b>`;
+      fuelDisplay.textContent = `${formatNumber(Math.floor(currentFuel))} t / ${formatNumber(Math.floor(maxFuel))} t`;
     }
 
     if (maxCO2 > 0) {
       // currentCO2 can be 0 or NEGATIVE - that's fine, we still show it
       if (currentCO2 < 0) {
-        co2Display.innerHTML = `-${formatNumber(Math.floor(Math.abs(currentCO2)))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxCO2))} <b>t</b>`;
+        co2Display.textContent = `-${formatNumber(Math.floor(Math.abs(currentCO2)))} t / ${formatNumber(Math.floor(maxCO2))} t`;
       } else {
-        co2Display.innerHTML = `${formatNumber(Math.floor(currentCO2))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxCO2))} <b>t</b>`;
+        co2Display.textContent = `${formatNumber(Math.floor(currentCO2))} t / ${formatNumber(Math.floor(maxCO2))} t`;
       }
     }
 
@@ -214,16 +214,8 @@ export async function updateBunkerStatus(settings) {
       if (fuelPrice <= settings.fuelThreshold) {
         fuelPriceDisplay.className = 'price-pulse-alert';
       } else {
-        // Apply standard color based on price ranges
-        if (fuelPrice >= 800) {
-          fuelPriceDisplay.className = 'fuel-red';
-        } else if (fuelPrice >= 600) {
-          fuelPriceDisplay.className = 'fuel-orange';
-        } else if (fuelPrice >= 400) {
-          fuelPriceDisplay.className = 'fuel-blue';
-        } else if (fuelPrice >= 1) {
-          fuelPriceDisplay.className = 'fuel-green';
-        }
+        // Apply standard color based on price ranges (using central function)
+        fuelPriceDisplay.className = getFuelPriceClass(fuelPrice);
       }
     }
 
@@ -237,16 +229,8 @@ export async function updateBunkerStatus(settings) {
       if (co2Price <= settings.co2Threshold) {
         co2PriceDisplay.className = 'price-pulse-alert';
       } else {
-        // Apply standard color based on price ranges
-        if (co2Price >= 20) {
-          co2PriceDisplay.className = 'co2-red';
-        } else if (co2Price >= 15) {
-          co2PriceDisplay.className = 'co2-orange';
-        } else if (co2Price >= 10) {
-          co2PriceDisplay.className = 'co2-blue';
-        } else if (co2Price >= 1) {
-          co2PriceDisplay.className = 'co2-green';
-        }
+        // Apply standard color based on price ranges (using central function)
+        co2PriceDisplay.className = getCO2PriceClass(co2Price);
       }
     } else if (co2Price !== null && co2Price !== undefined && co2Price < 0) {
       // Special case: Negative CO2 prices (you get paid!)
@@ -366,17 +350,8 @@ export async function buyMaxFuel() {
 
   const eventDiscount = hasDiscount ? { percentage: discountPercentage, type: 'fuel' } : null;
 
-  // Determine price color class (same logic as header)
-  let priceColorClass = '';
-  if (displayedPrice >= 800) {
-    priceColorClass = 'fuel-red';
-  } else if (displayedPrice >= 600) {
-    priceColorClass = 'fuel-orange';
-  } else if (displayedPrice >= 400) {
-    priceColorClass = 'fuel-blue';
-  } else if (displayedPrice >= 1) {
-    priceColorClass = 'fuel-green';
-  }
+  // Determine price color class (same logic as header, using central function)
+  const priceColorClass = getFuelPriceClass(displayedPrice);
 
   if (window.DEBUG_MODE) {
     console.log(`[Bunker] buyMaxFuel - actualCash: $${actualCash}, currentCash (var): $${currentCash}, displayedPrice: $${displayedPrice}/t (base: $${fuelPrice}/t), hasDiscount: ${hasDiscount}, priceColor: ${priceColorClass}`);
@@ -523,17 +498,8 @@ export async function buyMaxCO2() {
 
   const eventDiscount = hasDiscount ? { percentage: discountPercentage, type: 'co2' } : null;
 
-  // Determine price color class (same logic as header)
-  let priceColorClass = '';
-  if (displayedPrice >= 20) {
-    priceColorClass = 'co2-red';
-  } else if (displayedPrice >= 15) {
-    priceColorClass = 'co2-orange';
-  } else if (displayedPrice >= 10) {
-    priceColorClass = 'co2-blue';
-  } else if (displayedPrice >= 1) {
-    priceColorClass = 'co2-green';
-  }
+  // Determine price color class (same logic as header, using central function)
+  const priceColorClass = getCO2PriceClass(displayedPrice);
 
   // Calculate how much we can afford
   const maxAffordable = Math.floor(actualCash / displayedPrice);
@@ -669,7 +635,7 @@ export function updateCurrentCash(newCash) {
  */
 export function updateCurrentFuel(newFuel) {
   currentFuel = newFuel;
-  document.getElementById('fuelDisplay').innerHTML = `${formatNumber(Math.floor(currentFuel))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxFuel))} <b>t</b>`;
+  document.getElementById('fuelDisplay').textContent = `${formatNumber(Math.floor(currentFuel))} t / ${formatNumber(Math.floor(maxFuel))} t`;
 }
 
 /**
@@ -692,8 +658,8 @@ export function updateCurrentFuel(newFuel) {
 export function updateCurrentCO2(newCO2) {
   currentCO2 = newCO2;
   if (currentCO2 < 0) {
-    document.getElementById('co2Display').innerHTML = `-${formatNumber(Math.floor(Math.abs(currentCO2)))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxCO2))} <b>t</b>`;
+    document.getElementById('co2Display').textContent = `-${formatNumber(Math.floor(Math.abs(currentCO2)))} t / ${formatNumber(Math.floor(maxCO2))} t`;
   } else {
-    document.getElementById('co2Display').innerHTML = `${formatNumber(Math.floor(currentCO2))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxCO2))} <b>t</b>`;
+    document.getElementById('co2Display').textContent = `${formatNumber(Math.floor(currentCO2))} t / ${formatNumber(Math.floor(maxCO2))} t`;
   }
 }

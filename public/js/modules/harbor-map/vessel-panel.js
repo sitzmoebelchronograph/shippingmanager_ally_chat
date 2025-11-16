@@ -53,6 +53,31 @@ export async function showVesselPanel(vessel) {
   const panel = document.getElementById('vessel-detail-panel');
   if (!panel) return;
 
+  // Fetch sell price for this vessel (non-blocking)
+  let sellPrice = null;
+
+  // Start fetching sell price but don't block panel display
+  const sellPricePromise = fetch(window.apiUrl('/api/vessel/get-sell-price'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vessel_id: vessel.id })
+  }).then(response => {
+    if (response.ok) {
+      return response.json();
+    }
+    return null;
+  }).then(data => {
+    if (data && data.success && data.data && data.data.selling_price !== undefined) {
+      sellPrice = data.data.selling_price;
+      // Update the sell price display if panel is still open
+      const sellPriceElement = panel.querySelector('.vessel-sell-price');
+      if (sellPriceElement) {
+        sellPriceElement.innerHTML = `<strong>💵 Sell Price:</strong> $${formatNumber(sellPrice)}`;
+      }
+    }
+  }).catch(error => {
+    console.error('[Vessel Panel] Error fetching sell price:', error);
+  });
 
   // Helper functions for efficiency classes
   const getCO2Class = (factor) => {
@@ -303,6 +328,7 @@ export async function showVesselPanel(vessel) {
           <div class="vessel-specs">
             <div class="vessel-spec"><strong>Type:</strong> ${vessel.type_name || 'N/A'}</div>
             <div class="vessel-spec"><strong>Capacity:</strong> ${capacityDisplay}</div>
+            <div class="vessel-spec vessel-spec-fullwidth vessel-sell-price">${sellPrice !== null ? `<strong>💵 Sell Price:</strong> $${formatNumber(sellPrice)}` : '<strong>💵 Sell Price:</strong> <span style="color: var(--color-text-secondary)">Loading...</span>'}</div>
             <div class="vessel-spec"><strong>Range:</strong> ${formatNumber(vessel.range)} nm</div>
             <div class="vessel-spec ${getCO2Class(vessel.co2_factor)}"><strong>CO2 Factor:</strong> ${vessel.co2_factor || 'N/A'}</div>
             <div class="vessel-spec ${getFuelClass(vessel.fuel_factor)}"><strong>Fuel Factor:</strong> ${vessel.fuel_factor || 'N/A'}</div>
@@ -655,8 +681,69 @@ export async function closeVesselPanel() {
   await deselectAll();
 }
 
+// Queue for individual vessel departures
+const departureQueue = [];
+let isProcessingQueue = false;
+
 /**
- * Departs vessel using existing depart API
+ * Processes the departure queue one vessel at a time
+ */
+async function processDepartureQueue() {
+  if (isProcessingQueue || departureQueue.length === 0) {
+    return;
+  }
+
+  isProcessingQueue = true;
+  const { showSideNotification } = await import('../utils.js');
+
+  while (departureQueue.length > 0) {
+    const { vesselId, resolve, reject } = departureQueue.shift();
+
+    try {
+      const { departVessels } = await import('../api.js');
+      console.log(`[Vessel Panel] Processing departure for vessel ${vesselId} (${departureQueue.length} more in queue)`);
+
+      const result = await departVessels([vesselId]);
+
+      if (result.success) {
+        console.log(`[Vessel Panel] Vessel ${vesselId} departed successfully`);
+        resolve(result);
+      } else {
+        // Handle special case: autopilot is currently departing vessels
+        if (result.reason === 'depart_in_progress') {
+          console.log(`[Vessel Panel] Vessel ${vesselId} queued - autopilot departure in progress`);
+          showSideNotification('Queued - waiting for autopilot to finish departing vessels', 'info');
+
+          // Wait a bit and retry
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          departureQueue.unshift({ vesselId, resolve, reject }); // Add back to front of queue
+          continue;
+        }
+
+        const errorMsg = result.message || result.reason || 'Unknown error';
+        console.error(`[Vessel Panel] Failed to depart vessel ${vesselId}:`, errorMsg);
+
+        // Use side notification instead of alert
+        showSideNotification(`Failed to depart vessel: ${errorMsg}`, 'error');
+        reject(new Error(errorMsg));
+      }
+    } catch (error) {
+      console.error(`[Vessel Panel] Error departing vessel ${vesselId}:`, error);
+      showSideNotification(`Error departing vessel: ${error.message}`, 'error');
+      reject(error);
+    }
+
+    // Small delay between departures to avoid overwhelming the server
+    if (departureQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  isProcessingQueue = false;
+}
+
+/**
+ * Departs vessel using queue system
  *
  * @param {number} vesselId - Vessel ID to depart
  * @returns {Promise<void>}
@@ -664,16 +751,16 @@ export async function closeVesselPanel() {
  * await departVessel(1234);
  */
 export async function departVessel(vesselId) {
-  try {
-    // Import departVessels from api module
-    const { departVessels } = await import('../api.js');
+  return new Promise((resolve, reject) => {
+    // Add to queue
+    departureQueue.push({ vesselId, resolve, reject });
+    console.log(`[Vessel Panel] Added vessel ${vesselId} to departure queue (position: ${departureQueue.length})`);
 
-    console.log(`[Vessel Panel] Departing vessel ${vesselId}...`);
-
-    const result = await departVessels([vesselId]);
-
-    if (result.success) {
-      console.log('[Vessel Panel] Vessel departed successfully');
+    // Process queue
+    processDepartureQueue();
+  }).then(async (result) => {
+    // Success callback
+    console.log('[Vessel Panel] Vessel departed successfully');
 
       // Update vessel count in header
       if (window.updateVesselCount) {
@@ -708,25 +795,17 @@ export async function departVessel(vesselId) {
         }
 
         if (updatedVessel) {
-          console.log('[Vessel Panel] Vessel data updated, final status:', updatedVessel.status);
-
-          // Re-select the vessel to update both panel AND marker/tooltip on map
-          if (window.harborMap && window.harborMap.selectVesselFromMap) {
-            await window.harborMap.selectVesselFromMap(vesselId);
-            console.log('[Vessel Panel] Panel and map marker updated with new status');
-          }
+          console.log('[Vessel Panel] Vessel departed successfully, status:', updatedVessel.status);
         } else {
           console.warn('[Vessel Panel] Could not find vessel after departure:', vesselId);
         }
       }
-    } else {
-      console.error('[Vessel Panel] Departure failed:', result);
-      alert(`Failed to depart vessel: ${result.message || 'Unknown error'}`);
-    }
-  } catch (error) {
-    console.error('[Vessel Panel] Departure error:', error);
-    alert(`Error departing vessel: ${error.message}`);
-  }
+
+      return result;
+  }).catch(error => {
+    // Error already handled and shown as side notification in processDepartureQueue
+    console.error('[Vessel Panel] Departure failed:', error);
+  });
 }
 
 

@@ -236,6 +236,22 @@ router.get('/vessel/:vesselId/reachable-ports', async (req, res) => {
       return res.status(404).json({ error: 'Vessel not found' });
     }
 
+    // Debug log to see what route data is available
+    logger.debug(`[Harbor Map] Vessel ${vesselId} raw data:`, {
+      id: vessel.id,
+      name: vessel.name,
+      status: vessel.status,
+      has_active_route: !!vessel.active_route,
+      has_routes: !!(vessel.routes && vessel.routes.length > 0),
+      route_origin: vessel.route_origin,
+      route_destination: vessel.route_destination,
+      route_name: vessel.route_name,
+      next_route: vessel.next_route,
+      port_code: vessel.port_code,
+      active_route_keys: vessel.active_route ? Object.keys(vessel.active_route) : [],
+      routes_length: vessel.routes ? vessel.routes.length : 0
+    });
+
     // Aggregate vessel data
     const [vesselWithPosition] = aggregateVesselData([vessel], allPortsWithDemand);
 
@@ -250,28 +266,83 @@ router.get('/vessel/:vesselId/reachable-ports', async (req, res) => {
       vessel.capacity_type
     );
 
-    // Extract route if vessel is sailing
+    // Extract route if vessel has one (regardless of status - vessels in port can have assigned routes)
     let route = null;
-    if (vessel.status === 'enroute' && vessel.active_route?.path) {
-      logger.debug(`[Harbor Map] Active route for vessel ${vesselId}:`, JSON.stringify(vessel.active_route, null, 2));
+
+    // Check for route in active_route or routes array
+    let routeData = vessel.active_route || (vessel.routes && vessel.routes[0]) || null;
+
+    // For vessels in port with assigned route but no path data, fetch the actual route path
+    const hasNoPath = !routeData || !routeData.path || routeData.path.length === 0;
+    logger.info(`[Harbor Map] Vessel ${vesselId} check - status: ${vessel.status}, route_origin: ${vessel.route_origin}, route_destination: ${vessel.route_destination}, hasNoPath: ${hasNoPath}`);
+    if (vessel.status === 'port' && vessel.route_origin && vessel.route_destination && hasNoPath) {
+      try {
+        logger.info(`[Harbor Map] Vessel ${vesselId} in port has assigned route: ${vessel.route_origin} -> ${vessel.route_destination}`);
+        logger.info(`[Harbor Map] Fetching actual route path for ${vessel.route_origin} -> ${vessel.route_destination}...`);
+
+        const routePathResponse = await gameapi.getRoutesByPorts(vessel.route_origin, vessel.route_destination);
+
+        logger.info(`[Harbor Map] Route path response:`, {
+          success: !!routePathResponse?.success,
+          has_data: !!routePathResponse?.data,
+          has_routes: !!(routePathResponse?.data?.routes),
+          routes_count: routePathResponse?.data?.routes?.length || 0
+        });
+
+        if (routePathResponse?.data?.routes && routePathResponse.data.routes[0]) {
+          const fetchedRoute = routePathResponse.data.routes[0];
+          logger.info(`[Harbor Map] Fetched route path with ${fetchedRoute.path?.length || 0} waypoints`);
+          routeData = {
+            path: fetchedRoute.path || [],
+            origin: fetchedRoute.port1 || vessel.route_origin,
+            destination: fetchedRoute.port2 || vessel.route_destination
+          };
+        } else {
+          logger.warn(`[Harbor Map] No route found for ${vessel.route_origin} -> ${vessel.route_destination}, using straight line`);
+          routeData = {
+            path: [],
+            origin: vessel.route_origin,
+            destination: vessel.route_destination
+          };
+        }
+      } catch (error) {
+        logger.error(`[Harbor Map] Error fetching route path for ${vessel.route_origin} -> ${vessel.route_destination}:`, error.message);
+        routeData = {
+          path: [],
+          origin: vessel.route_origin,
+          destination: vessel.route_destination
+        };
+      }
+    }
+
+    if (routeData && routeData.path) {
+      logger.debug(`[Harbor Map] Route found for vessel ${vesselId} (status: ${vessel.status}):`, JSON.stringify(routeData, null, 2));
 
       // Handle reversed routes - if reversed=true, swap origin and destination
-      const isReversed = vessel.active_route.reversed === true;
+      const isReversed = routeData.reversed === true;
       const actualOrigin = isReversed
-        ? (vessel.active_route.destination_port_code || vessel.active_route.destination)
-        : (vessel.active_route.origin_port_code || vessel.active_route.origin);
+        ? (routeData.destination_port_code || routeData.destination)
+        : (routeData.origin_port_code || routeData.origin);
       const actualDestination = isReversed
-        ? (vessel.active_route.origin_port_code || vessel.active_route.origin)
-        : (vessel.active_route.destination_port_code || vessel.active_route.destination);
+        ? (routeData.origin_port_code || routeData.origin)
+        : (routeData.destination_port_code || routeData.destination);
 
       route = {
         path: isReversed
-          ? vessel.active_route.path.slice().reverse()
-          : vessel.active_route.path,
+          ? routeData.path.slice().reverse()
+          : routeData.path,
         origin: actualOrigin,
         destination: actualDestination
       };
-      logger.debug(`[Harbor Map] Route created (reversed=${isReversed}) with origin: ${route.origin}, destination: ${route.destination}`);
+      logger.debug(`[Harbor Map] Route created (reversed=${isReversed}) for vessel in ${vessel.status} status with origin: ${route.origin}, destination: ${route.destination}`);
+    } else if (vessel.route_origin && vessel.route_destination) {
+      // Fallback: If no path but has origin/destination, still send route info (without path)
+      route = {
+        path: [],
+        origin: vessel.route_origin,
+        destination: vessel.route_destination
+      };
+      logger.debug(`[Harbor Map] Route info without path for vessel ${vesselId}: ${route.origin} -> ${route.destination}`);
     }
 
     res.json({

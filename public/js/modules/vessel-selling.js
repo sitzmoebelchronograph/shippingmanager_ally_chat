@@ -16,6 +16,7 @@ import { selectVessel } from './harbor-map/map-controller.js';
 let currentSellVessels = [];
 let selectedSellVessels = [];
 let currentSellFilter = 'container';
+let globalPriceMap = new Map(); // Global price map for access in event handlers
 
 const SELL_CART_CACHE_KEY = 'vessel_sell_cart';
 
@@ -27,6 +28,28 @@ function loadSellCartFromCache() {
     const cached = localStorage.getItem(SELL_CART_CACHE_KEY);
     if (cached) {
       selectedSellVessels = JSON.parse(cached);
+
+      // Migrate old format to new format if needed
+      let needsMigration = false;
+      selectedSellVessels.forEach(item => {
+        if (!item.vesselPrices && item.sellPrice !== undefined) {
+          needsMigration = true;
+          // Convert old format to new format
+          item.vesselPrices = item.vesselIds.map(id => ({
+            vesselId: id,
+            sellPrice: item.sellPrice,
+            originalPrice: item.originalPrice
+          }));
+          delete item.sellPrice;
+          delete item.originalPrice;
+        }
+      });
+
+      if (needsMigration) {
+        saveSellCartToCache();
+        console.log('[Vessel Selling] Migrated cart to new format');
+      }
+
       updateBulkSellButton();
       console.log('[Vessel Selling] Loaded', selectedSellVessels.length, 'items from cache');
     }
@@ -59,10 +82,21 @@ function clearSellCartCache() {
 
 /**
  * Opens the sell vessels overlay and loads user vessels
+ * ALWAYS fetches fresh data when opening - no stale cached data
  */
 export async function openSellVesselsOverlay() {
   document.getElementById('sellVesselsOverlay').classList.remove('hidden');
   loadSellCartFromCache();
+
+  // Show cached data immediately (if available) for instant display
+  if (currentSellVessels && currentSellVessels.length > 0) {
+    // Display cached static data immediately
+    await displaySellVessels();
+  }
+
+  // Then fetch fresh data in background for dynamic fields
+  // Clear cache and fetch new data
+  currentSellVessels = [];
   await loadUserVesselsForSale();
 }
 
@@ -95,7 +129,7 @@ export async function refreshVesselsForSale() {
 
 /**
  * Loads user's vessels and groups them by model
- * Uses cache from api.js for instant loading
+ * Implements progressive loading - shows static data first, then updates dynamic data
  */
 async function loadUserVesselsForSale() {
   const startTime = performance.now();
@@ -122,6 +156,66 @@ async function loadUserVesselsForSale() {
       console.log(`[Sell Perf] Display vessels: ${(displayEnd - displayStart).toFixed(2)}ms`);
     }
 
+    // Clean up cart - remove vessels that no longer exist (sold/deleted)
+    const existingVesselIds = new Set(vessels.map(v => v.id));
+    const itemsToRemove = [];
+    const itemsToUpdate = [];
+
+    selectedSellVessels.forEach(item => {
+      // Check if all vessel IDs in this cart item still exist
+      const validVesselIds = item.vesselIds.filter(id => existingVesselIds.has(id));
+
+      if (validVesselIds.length === 0) {
+        // All vessels for this item are gone - remove from cart
+        itemsToRemove.push(item.modelKey);
+        console.log(`[Cart] Removing ${item.modelName} from cart - all vessels sold/deleted`);
+      } else if (validVesselIds.length < item.vesselIds.length) {
+        // Some vessels are gone - update the item and recalculate prices
+        item.vesselIds = validVesselIds;
+        item.quantity = validVesselIds.length;
+        itemsToUpdate.push(item);
+        console.log(`[Cart] Updated ${item.modelName} - reduced quantity to ${validVesselIds.length}, recalculating prices`);
+      }
+    });
+
+    // Recalculate prices for updated items
+    if (itemsToUpdate.length > 0 && priceMap && priceMap.size > 0) {
+      itemsToUpdate.forEach(item => {
+        let totalSellPrice = 0;
+        let totalOriginalPrice = 0;
+        let pricesFound = 0;
+
+        item.vesselIds.forEach(vesselId => {
+          const priceInfo = priceMap.get(vesselId);
+          if (priceInfo && priceInfo.sellPrice !== undefined && priceInfo.originalPrice !== undefined) {
+            totalSellPrice += priceInfo.sellPrice;
+            totalOriginalPrice += priceInfo.originalPrice;
+            pricesFound++;
+          }
+        });
+
+        if (pricesFound > 0) {
+          item.sellPrice = totalSellPrice / pricesFound;
+          item.originalPrice = totalOriginalPrice / pricesFound;
+          console.log(`[Cart] Recalculated prices for ${item.modelName}: sell=$${item.sellPrice}, original=$${item.originalPrice}`);
+        } else {
+          // No valid prices found - mark as undefined
+          item.sellPrice = undefined;
+          item.originalPrice = undefined;
+          console.warn(`[Cart] No valid prices found for ${item.modelName}`);
+        }
+      });
+    }
+
+    // Remove invalid items
+    itemsToRemove.forEach(modelKey => {
+      removeVesselSelectionFromCart(modelKey);
+    });
+
+    if (itemsToRemove.length > 0) {
+      saveSellCartToCache();
+    }
+
     const totalTime = performance.now() - startTime;
     if (window.DEBUG_MODE) {
       console.log(`[Sell Perf] Total load time: ${totalTime.toFixed(2)}ms`);
@@ -141,30 +235,30 @@ async function fetchAllSellPrices(grouped) {
   const priceMap = new Map();
   const priceRequests = [];
 
-  // Collect all unique vessel IDs (one per model with harbor vessels)
+  // Fetch prices for ALL vessels, not just the first one
   Object.entries(grouped).forEach(([modelKey, group]) => {
-    if (group.harborVessels.length > 0) {
-      const vesselId = group.harborVessels[0].id;
+    // Get prices for all harbor vessels in this group
+    group.harborVessels.forEach(vessel => {
       priceRequests.push(
         fetch(window.apiUrl('/api/vessel/get-sell-price'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ vessel_id: vesselId })
+          body: JSON.stringify({ vessel_id: vessel.id })
         })
           .then(response => response.ok ? response.json() : null)
           .then(data => {
             if (data && data.data) {
-              priceMap.set(vesselId, {
+              priceMap.set(vessel.id, {
                 sellPrice: data.data.selling_price,
                 originalPrice: data.data.original_price
               });
             }
           })
           .catch(error => {
-            console.error(`[Vessel Selling] Failed to get sell price for vessel ${vesselId}:`, error);
+            console.error(`[Vessel Selling] Failed to get sell price for vessel ${vessel.id}:`, error);
           })
       );
-    }
+    });
   });
 
   // Wait for all price requests to complete in parallel
@@ -225,12 +319,13 @@ async function displaySellVessels() {
   const grouped = groupVesselsByModel(filtered);
   const modelCount = Object.keys(grouped).length;
 
-  // Fetch all sell prices in parallel (MUCH faster than sequential)
-  const priceStart = performance.now();
-  const priceMap = await fetchAllSellPrices(grouped);
-  const priceEnd = performance.now();
-  if (window.DEBUG_MODE) {
-    console.log(`[Sell Perf] Fetched ${priceMap.size} prices in parallel: ${(priceEnd - priceStart).toFixed(2)}ms (${modelCount} models total)`);
+  // First render the cards with static data (immediate display)
+  let priceMap = new Map();
+
+  // Use cached prices if available for immediate display
+  if (window.cachedSellPrices && window.cachedSellPrices.size > 0) {
+    priceMap = window.cachedSellPrices;
+    globalPriceMap = priceMap; // Update global for access in event handlers
   }
 
   // Separate into harbor and at sea
@@ -260,18 +355,10 @@ async function displaySellVessels() {
   }
 
   // Helper function to render a vessel card
-  const renderVesselCard = async (modelKey, group, canSell, priceInfo) => {
+  const renderVesselCard = async (modelKey, group, canSell, priceMap) => {
     const model = group.model;
     const allVessels = group.vessels;
     const harborVessels = group.harborVessels;
-
-    // Use pre-fetched price data (passed as parameter)
-    let sellPrice;
-    let originalPrice;
-    if (priceInfo) {
-      sellPrice = priceInfo.sellPrice;
-      originalPrice = priceInfo.originalPrice;
-    }
 
     const selectedItem = selectedSellVessels.find(v => v.modelKey === modelKey);
     const isSelected = !!selectedItem;
@@ -299,7 +386,6 @@ async function displaySellVessels() {
       <div class="vessel-content">
         <div class="vessel-header">
           <h3 class="vessel-name">${allVessels[0].name.replace(/_\d+$/, '')}</h3>
-          <div class="vessel-price">${sellPrice !== undefined ? '$' + formatNumber(sellPrice) : (harborVessels.length === 0 ? 'At Sea' : 'Price N/A')}</div>
         </div>
         <div class="vessel-specs">
           <div class="vessel-spec"><strong>Capacity:</strong> ${capacityDisplay}</div>
@@ -341,6 +427,15 @@ async function displaySellVessels() {
               return sorted.map((v) => {
                 const canSelect = v.status !== 'route' && v.status !== 'enroute';
 
+                // Get the sell price for this specific vessel
+                const vesselPriceInfo = priceMap && priceMap.get ? priceMap.get(v.id) : null;
+                const vesselSellPrice = vesselPriceInfo ? vesselPriceInfo.sellPrice : null;
+
+                // Show loading placeholder if price not yet available
+                const priceDisplay = vesselSellPrice
+                  ? `<span class="sell-vessel-price">$${formatNumber(vesselSellPrice)}</span>`
+                  : `<span class="sell-vessel-price" data-vessel-id="${v.id}">Loading...</span>`;
+
                 // Status: emoji only, text as mouseover
                 let statusDisplay;
                 if (v.status === 'port') {
@@ -358,11 +453,14 @@ async function displaySellVessels() {
                 return `
                   <div class="sell-vessel-list-item">
                     <div class="sell-vessel-item-left">
-                      ${canSelect && canSell ? `<input type="checkbox" class="vessel-checkbox sell-vessel-checkbox" data-vessel-id="${v.id}" data-model-key="${modelKey}">` : '<div class="sell-vessel-checkbox-placeholder"></div>'}
+                      ${canSelect && canSell ? `<input type="checkbox" class="vessel-checkbox sell-vessel-checkbox" data-vessel-id="${v.id}" data-model-key="${modelKey}" data-sell-price="${vesselSellPrice || 0}">` : '<div class="sell-vessel-checkbox-placeholder"></div>'}
                       <span class="${canSelect ? 'sell-vessel-name-available' : 'sell-vessel-name-unavailable'}">${v.name}</span>
                       <button class="vessel-locate-btn" data-vessel-id="${v.id}" title="Show on map" onmouseover="this.querySelector('span').style.animation='pulse-arrow 0.6s ease-in-out infinite'" onmouseout="this.querySelector('span').style.animation='none'"><span>📍</span></button>
                     </div>
-                    <span class="sell-vessel-status">${statusDisplay}</span>
+                    <div class="sell-vessel-item-right">
+                      ${canSelect ? priceDisplay : ''}
+                      <span class="sell-vessel-status">${statusDisplay}</span>
+                    </div>
                   </div>
                 `;
               }).join('');
@@ -423,9 +521,28 @@ async function displaySellVessels() {
             quantityInput.value = quantity;
           }
 
-          // Update cart
+          // Update cart - store individual vessel prices and names
           if (quantity > 0) {
-            updateVesselSelectionInCart(modelKey, quantity, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice, originalPrice);
+            const vesselPrices = [];
+            const vesselNames = {};
+
+            selectedVesselIds.forEach(vesselId => {
+              const vessel = harborVessels.find(v => v.id === vesselId);
+              if (vessel) {
+                vesselNames[vesselId] = vessel.name;
+              }
+
+              const priceInfo = globalPriceMap && globalPriceMap.get ? globalPriceMap.get(vesselId) : null;
+              if (priceInfo && priceInfo.sellPrice !== undefined && priceInfo.originalPrice !== undefined) {
+                vesselPrices.push({
+                  vesselId,
+                  sellPrice: priceInfo.sellPrice,
+                  originalPrice: priceInfo.originalPrice
+                });
+              }
+            });
+
+            updateVesselSelectionInCart(modelKey, quantity, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, vesselPrices, vesselNames);
           } else {
             removeVesselSelectionFromCart(modelKey);
           }
@@ -464,7 +581,7 @@ async function displaySellVessels() {
 
           // If nothing selected, auto-select from quantity input
           if (checkedBoxes.length === 0) {
-            const quantity = parseInt(quantityInput?.value) || 1;
+            const quantity = quantityInput?.value ? parseInt(quantityInput.value) : 1;
             checkboxes.forEach(cb => cb.checked = false);
             Array.from(checkboxes).slice(0, quantity).forEach(cb => cb.checked = true);
             checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
@@ -477,8 +594,28 @@ async function displaySellVessels() {
             return;
           }
 
+          // Collect individual vessel prices AND names
+          const vesselPrices = [];
+          const vesselNames = {};
+
+          selectedVesselIds.forEach(vesselId => {
+            const vessel = harborVessels.find(v => v.id === vesselId);
+            if (vessel) {
+              vesselNames[vesselId] = vessel.name;
+            }
+
+            const priceInfo = globalPriceMap && globalPriceMap.get ? globalPriceMap.get(vesselId) : null;
+            if (priceInfo && priceInfo.sellPrice !== undefined && priceInfo.originalPrice !== undefined) {
+              vesselPrices.push({
+                vesselId,
+                sellPrice: priceInfo.sellPrice,
+                originalPrice: priceInfo.originalPrice
+              });
+            }
+          });
+
           // Update cart (replaces quantity, does not increment)
-          updateVesselSelectionInCart(modelKey, selectedVesselIds.length, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice, originalPrice);
+          updateVesselSelectionInCart(modelKey, selectedVesselIds.length, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, vesselPrices, vesselNames);
           showSideNotification(`Added ${selectedVesselIds.length}x ${allVessels[0].name.replace(/_\d+$/, '')} to cart`, 'success');
         });
       }
@@ -489,7 +626,7 @@ async function displaySellVessels() {
 
           // If nothing selected, auto-select from top based on quantity input
           if (checkedBoxes.length === 0) {
-            const quantity = parseInt(quantityInput?.value) || 1;
+            const quantity = quantityInput?.value ? parseInt(quantityInput.value) : 1;
             Array.from(checkboxes).slice(0, quantity).forEach(cb => cb.checked = true);
             checkedBoxes = card.querySelectorAll('.vessel-checkbox:checked');
           }
@@ -501,7 +638,33 @@ async function displaySellVessels() {
             return;
           }
 
-          sellVessels(modelKey, selectedVesselIds.length, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, sellPrice, originalPrice);
+          // Collect individual vessel prices and names
+          const vesselPrices = [];
+          const vesselNames = {};
+
+          selectedVesselIds.forEach(vesselId => {
+            // Get vessel name
+            const vessel = harborVessels.find(v => v.id === vesselId);
+            if (vessel) {
+              vesselNames[vesselId] = vessel.name;
+            }
+
+            // Get price info from global price map
+            const priceInfo = globalPriceMap && globalPriceMap.get ? globalPriceMap.get(vesselId) : null;
+            if (priceInfo && priceInfo.sellPrice !== undefined && priceInfo.originalPrice !== undefined) {
+              vesselPrices.push({
+                vesselId,
+                sellPrice: priceInfo.sellPrice,
+                originalPrice: priceInfo.originalPrice
+              });
+            }
+          });
+
+          // Add to cart
+          updateVesselSelectionInCart(modelKey, selectedVesselIds.length, allVessels[0].name.replace(/_\d+$/, ''), selectedVesselIds, vesselPrices, vesselNames);
+
+          // Immediately open the cart dialog
+          showSellCart();
         });
       }
     }
@@ -519,9 +682,8 @@ async function displaySellVessels() {
     const portGrid = document.createElement('div');
     portGrid.className = 'vessel-catalog-grid';
     for (const [modelKey, group] of atPort) {
-      // Get price info for this vessel model
-      const priceInfo = group.harborVessels.length > 0 ? priceMap.get(group.harborVessels[0].id) : null;
-      portGrid.appendChild(await renderVesselCard(modelKey, group, true, priceInfo));
+      // Pass the entire priceMap so each vessel can look up its own price
+      portGrid.appendChild(await renderVesselCard(modelKey, group, true, priceMap));
     }
     container.appendChild(portGrid);
   }
@@ -548,6 +710,37 @@ async function displaySellVessels() {
   // Restore checkboxes for cached items
   selectedSellVessels.forEach(item => {
     updateSelectButtonState(item.modelKey, item.quantity);
+  });
+
+  // Now fetch prices in background and update when ready (progressive loading)
+  fetchAllSellPrices(grouped).then(newPriceMap => {
+    // Cache prices for next time
+    window.cachedSellPrices = newPriceMap;
+    globalPriceMap = newPriceMap; // Update global for access in event handlers
+
+    // Update all price displays
+    newPriceMap.forEach((priceInfo, vesselId) => {
+      // Update price display in vessel list (using data-vessel-id attribute)
+      const priceSpan = document.querySelector(`.sell-vessel-price[data-vessel-id="${vesselId}"]`);
+      if (priceSpan) {
+        priceSpan.textContent = `$${formatNumber(priceInfo.sellPrice)}`;
+      }
+
+      // Update checkbox data attribute
+      const checkbox = document.querySelector(`.vessel-checkbox[data-vessel-id="${vesselId}"]`);
+      if (checkbox) {
+        checkbox.dataset.sellPrice = priceInfo.sellPrice;
+      }
+    });
+
+    // Update the local priceMap variable too
+    priceMap = newPriceMap;
+
+    if (window.DEBUG_MODE) {
+      console.log(`[Sell Perf] Updated ${newPriceMap.size} prices after progressive load`);
+    }
+  }).catch(error => {
+    console.error('[Vessel Selling] Error fetching sell prices:', error);
   });
 }
 
@@ -595,16 +788,18 @@ function getFuelEfficiencyClass(factor) {
 /**
  * Updates vessel selection in cart (replaces quantity - used by cart controls)
  */
-function updateVesselSelectionInCart(modelKey, quantity, modelName, vesselIds, sellPrice, originalPrice) {
+function updateVesselSelectionInCart(modelKey, quantity, modelName, vesselIds, vesselPrices, vesselNames) {
   const index = selectedSellVessels.findIndex(v => v.modelKey === modelKey);
 
   if (index > -1) {
     // Update existing selection
     selectedSellVessels[index].quantity = quantity;
     selectedSellVessels[index].vesselIds = vesselIds;
+    selectedSellVessels[index].vesselPrices = vesselPrices;
+    selectedSellVessels[index].vesselNames = vesselNames;
   } else {
     // Add new selection
-    selectedSellVessels.push({ modelKey, quantity, modelName, vesselIds, sellPrice, originalPrice });
+    selectedSellVessels.push({ modelKey, quantity, modelName, vesselIds, vesselPrices, vesselNames });
   }
 
   const totalCount = selectedSellVessels.reduce((sum, item) => sum + item.quantity, 0);
@@ -700,61 +895,7 @@ function updateBulkSellButton() {
   }
 }
 
-/**
- * Sells vessels of a specific model
- */
-async function sellVessels(modelKey, quantity, modelName, vesselIds, sellPrice, originalPrice) {
-  try {
-    const totalPrice = sellPrice * quantity;
-
-    const confirmed = await showConfirmDialog({
-      title: `Vessel ${modelName}`,
-      message: `
-        <div style="text-align: center; line-height: 1.8;">
-          <div style="color: #9ca3af; font-size: 14px; margin-bottom: 8px;">
-            Original Price: ${formatNumber(originalPrice)}
-          </div>
-          <div style="color: #6b7280; margin-bottom: 8px;">
-            ━━━━━━━━━━━━━━━━━━━━━━
-          </div>
-          <div style="color: #10b981; font-size: 16px; font-weight: 600;">
-            Sell Price: ${formatNumber(sellPrice)}
-          </div>
-        </div>
-      `,
-      confirmText: 'Sell'
-    });
-
-    if (!confirmed) return;
-
-    const response = await fetch(window.apiUrl('/api/vessel/sell-vessels'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vessel_ids: vesselIds })
-    });
-
-    if (!response.ok) throw new Error('Failed to sell vessels');
-
-    await response.json();
-
-    showSideNotification(`✅ Sold ${quantity}x ${modelName} for $${formatNumber(totalPrice)}`, 'success');
-
-    // Remove sold vessels from cart
-    const index = selectedSellVessels.findIndex(v => v.modelKey === modelKey);
-    if (index > -1) {
-      selectedSellVessels.splice(index, 1);
-      saveSellCartToCache();
-      updateBulkSellButton();
-    }
-
-    // Reload vessels
-    await loadUserVesselsForSale();
-
-  } catch (error) {
-    console.error('[Vessel Selling] Error:', error);
-    showSideNotification('Failed to sell vessels', 'error');
-  }
-}
+// sellVessels function removed - "Sell Now" button now uses the cart dialog via showSellCart()
 
 /**
  * Shows the sell cart overlay
@@ -765,8 +906,19 @@ export function showSellCart() {
     return;
   }
 
-  // Calculate total
-  const totalRevenue = selectedSellVessels.reduce((sum, item) => sum + (item.sellPrice * item.quantity), 0);
+  // Calculate total from individual vessel prices
+  const totalRevenue = selectedSellVessels.reduce((sum, item) => {
+    if (!item.vesselPrices || item.vesselPrices.length === 0) {
+      // Check for legacy format
+      if (item.sellPrice !== undefined && item.sellPrice !== null) {
+        return sum + (item.sellPrice * item.quantity);
+      }
+      console.warn(`[Cart] Warning: no vessel prices for ${item.modelName}, skipping from total`);
+      return sum;
+    }
+    const itemTotal = item.vesselPrices.reduce((priceSum, vp) => priceSum + (vp.sellPrice || 0), 0);
+    return sum + itemTotal;
+  }, 0);
   const totalItems = selectedSellVessels.reduce((sum, item) => sum + item.quantity, 0);
 
   const overlay = document.createElement('div');
@@ -775,47 +927,60 @@ export function showSellCart() {
   const dialog = document.createElement('div');
   dialog.className = 'confirm-dialog shopping-cart-dialog';
 
-  // Build cart items HTML
-  const cartItemsHtml = selectedSellVessels.map(item => `
-    <div class="cart-item" data-model-key="${item.modelKey}">
-      <div class="cart-item-info">
-        <div class="cart-item-name">
-          ${item.modelName}
-          <span class="cart-item-original-price">(${item.originalPrice !== undefined ? '$' + formatNumber(item.originalPrice) : 'N/A'})</span>
-        </div>
-        <div class="cart-item-price">$${formatNumber(item.sellPrice)}</div>
-      </div>
-      <div class="cart-item-controls">
-        <button class="cart-qty-btn minus" data-model-key="${item.modelKey}">−</button>
-        <span class="cart-qty-display">${item.quantity}</span>
-        <button class="cart-qty-btn plus" data-model-key="${item.modelKey}">+</button>
-        <button class="cart-remove-btn" data-model-key="${item.modelKey}" title="Remove from cart">🗑️</button>
-      </div>
-    </div>
-  `).join('');
+  // Build cart items HTML - show individual vessels, not grouped
+  const cartItemsHtml = selectedSellVessels.map(item => {
+    // Get vessel names from priceMap or use IDs
+    let vesselLines = [];
+
+    if (item.vesselPrices && item.vesselPrices.length > 0) {
+      // Show each vessel as individual line
+      item.vesselPrices.forEach(vp => {
+        const vesselName = item.vesselNames && item.vesselNames[vp.vesselId]
+          ? item.vesselNames[vp.vesselId]
+          : `${item.modelName}_${vp.vesselId}`;
+
+        vesselLines.push(`
+          <div class="cart-item invoice-line" data-vessel-id="${vp.vesselId}" data-model-key="${item.modelKey}">
+            <span class="invoice-name">${vesselName}</span>
+            <span class="invoice-unit-price">$${formatNumber(vp.sellPrice || 0)}</span>
+            <span class="invoice-total">$${formatNumber(vp.sellPrice || 0)}</span>
+            <button class="remove-btn-small" data-vessel-id="${vp.vesselId}" data-model-key="${item.modelKey}" title="Remove">×</button>
+          </div>
+        `);
+      });
+    }
+
+    return vesselLines.join('');
+  }).join('');
 
   dialog.innerHTML = `
-    <div class="confirm-dialog-header">
-      <h3>💵 Sell Cart</h3>
+    <div class="confirm-dialog-header invoice-header">
+      <h3>Sell Order Summary</h3>
       <div class="confirm-dialog-buttons">
-        <button class="confirm-dialog-btn cancel" data-action="cancel">Close</button>
-        <button class="confirm-dialog-btn confirm" data-action="sell">💰 Sell All</button>
+        <button class="confirm-dialog-btn cancel" data-action="cancel">Cancel</button>
+        <button class="confirm-dialog-btn confirm" data-action="sell">Confirm Sale</button>
       </div>
     </div>
-    <div class="confirm-dialog-body">
-      <div class="cart-summary affordable">
-        <div class="summary-row">
-          <span class="label">Total Items:</span>
-          <span class="value">${totalItems} vessel${totalItems === 1 ? '' : 's'}</span>
-        </div>
-        <div class="summary-row total">
-          <span class="label">Total Revenue:</span>
-          <span class="value">$${formatNumber(totalRevenue)}</span>
-        </div>
+    <div class="confirm-dialog-body invoice-body">
+      <div class="invoice-header-row">
+        <span class="invoice-name">Vessel</span>
+        <span class="invoice-unit-price">Price</span>
+        <span class="invoice-total">Total</span>
+        <span class="invoice-action"></span>
       </div>
-      <div class="cart-separator"></div>
-      <div class="cart-items">
+      <div class="cart-items invoice-items">
         ${cartItemsHtml}
+      </div>
+      <div class="invoice-separator"></div>
+      <div class="invoice-totals">
+        <div class="invoice-total-row">
+          <span class="invoice-total-label">Total Vessels:</span>
+          <span class="invoice-total-value">${totalItems}</span>
+        </div>
+        <div class="invoice-total-row grand-total">
+          <span class="invoice-total-label">Total Amount:</span>
+          <span class="invoice-total-value">$${formatNumber(totalRevenue)}</span>
+        </div>
       </div>
     </div>
   `;
@@ -842,7 +1007,7 @@ export function showSellCart() {
   });
 
   // Plus/Minus/Remove buttons
-  dialog.querySelectorAll('.cart-qty-btn.plus').forEach(btn => {
+  dialog.querySelectorAll('.qty-btn-small.plus').forEach(btn => {
     btn.addEventListener('click', () => {
       const modelKey = btn.dataset.modelKey;
       // Find item in cart and increase quantity by 1 (if available)
@@ -860,8 +1025,26 @@ export function showSellCart() {
               const checkboxes = card.querySelectorAll('.vessel-checkbox');
               if (checkboxes[item.quantity - 1]) {
                 checkboxes[item.quantity - 1].checked = true;
+
+                // Add the new vessel to vesselIds and vesselPrices
+                const newVesselId = parseInt(checkboxes[item.quantity - 1].dataset.vesselId);
+                if (!item.vesselIds.includes(newVesselId)) {
+                  item.vesselIds.push(newVesselId);
+
+                  // Add price info for the new vessel
+                  const priceInfo = priceMap && priceMap.get ? priceMap.get(newVesselId) : null;
+                  if (priceInfo && priceInfo.sellPrice !== undefined) {
+                    if (!item.vesselPrices) item.vesselPrices = [];
+                    item.vesselPrices.push({
+                      vesselId: newVesselId,
+                      sellPrice: priceInfo.sellPrice,
+                      originalPrice: priceInfo.originalPrice
+                    });
+                  }
+                }
               }
               quantityInput.value = item.quantity;
+              saveSellCartToCache();
               updateBulkSellButton();
               closeOverlay();
               showSellCart();
@@ -872,7 +1055,7 @@ export function showSellCart() {
     });
   });
 
-  dialog.querySelectorAll('.cart-qty-btn.minus').forEach(btn => {
+  dialog.querySelectorAll('.qty-btn-small.minus').forEach(btn => {
     btn.addEventListener('click', () => {
       const modelKey = btn.dataset.modelKey;
       const item = selectedSellVessels.find(v => v.modelKey === modelKey);
@@ -886,10 +1069,26 @@ export function showSellCart() {
             const checkboxes = card.querySelectorAll('.vessel-checkbox');
             if (checkboxes[item.quantity]) {
               checkboxes[item.quantity].checked = false;
+
+              // Remove the vessel from vesselIds and vesselPrices
+              const removedVesselId = parseInt(checkboxes[item.quantity].dataset.vesselId);
+              const vesselIndex = item.vesselIds.indexOf(removedVesselId);
+              if (vesselIndex > -1) {
+                item.vesselIds.splice(vesselIndex, 1);
+
+                // Remove price info for this vessel
+                if (item.vesselPrices) {
+                  const priceIndex = item.vesselPrices.findIndex(vp => vp.vesselId === removedVesselId);
+                  if (priceIndex > -1) {
+                    item.vesselPrices.splice(priceIndex, 1);
+                  }
+                }
+              }
             }
             quantityInput.value = item.quantity;
           }
         });
+        saveSellCartToCache();
         updateBulkSellButton();
         closeOverlay();
         showSellCart();
@@ -897,21 +1096,55 @@ export function showSellCart() {
     });
   });
 
-  dialog.querySelectorAll('.cart-remove-btn').forEach(btn => {
+  dialog.querySelectorAll('.remove-btn-small').forEach(btn => {
     btn.addEventListener('click', () => {
+      const vesselId = parseInt(btn.dataset.vesselId);
       const modelKey = btn.dataset.modelKey;
-      removeVesselSelectionFromCart(modelKey);
-      // Uncheck all checkboxes for this model
-      const cards = document.querySelectorAll('.vessel-card');
-      cards.forEach(card => {
-        const checkboxes = card.querySelectorAll(`.vessel-checkbox[data-model-key="${modelKey}"]`);
-        checkboxes.forEach(cb => cb.checked = false);
-        const quantityInput = card.querySelector(`.vessel-quantity-input[data-model-key="${modelKey}"]`);
-        if (quantityInput) quantityInput.value = 0;
-      });
-      closeOverlay();
-      if (selectedSellVessels.length > 0) {
-        showSellCart();
+
+      // Find the item in cart
+      const item = selectedSellVessels.find(v => v.modelKey === modelKey);
+      if (item) {
+        // Remove this specific vessel
+        const vesselIndex = item.vesselIds.indexOf(vesselId);
+        if (vesselIndex > -1) {
+          item.vesselIds.splice(vesselIndex, 1);
+          item.quantity--;
+
+          // Remove from vesselPrices
+          if (item.vesselPrices) {
+            const priceIndex = item.vesselPrices.findIndex(vp => vp.vesselId === vesselId);
+            if (priceIndex > -1) {
+              item.vesselPrices.splice(priceIndex, 1);
+            }
+          }
+
+          // Remove from vesselNames
+          if (item.vesselNames && item.vesselNames[vesselId]) {
+            delete item.vesselNames[vesselId];
+          }
+
+          // If no vessels left, remove the whole item
+          if (item.quantity === 0 || item.vesselIds.length === 0) {
+            const itemIndex = selectedSellVessels.indexOf(item);
+            if (itemIndex > -1) {
+              selectedSellVessels.splice(itemIndex, 1);
+            }
+          }
+
+          // Uncheck the checkbox in the sell vessels overlay
+          const cards = document.querySelectorAll('.vessel-card');
+          cards.forEach(card => {
+            const checkbox = card.querySelector(`.vessel-checkbox[data-vessel-id="${vesselId}"]`);
+            if (checkbox) checkbox.checked = false;
+          });
+
+          saveSellCartToCache();
+          updateBulkSellButton();
+          closeOverlay();
+          if (selectedSellVessels.length > 0) {
+            showSellCart();
+          }
+        }
       }
     });
   });
@@ -931,7 +1164,16 @@ export async function bulkSellVessels() {
 
     selectedSellVessels.forEach(sel => {
       totalVessels += sel.quantity;
-      const itemTotal = sel.sellPrice * sel.quantity;
+      let itemTotal = 0;
+
+      // Calculate total from individual vessel prices
+      if (sel.vesselPrices && sel.vesselPrices.length > 0) {
+        itemTotal = sel.vesselPrices.reduce((sum, vp) => sum + (vp.sellPrice || 0), 0);
+      } else if (sel.sellPrice !== undefined) {
+        // Legacy format support
+        itemTotal = sel.sellPrice * sel.quantity;
+      }
+
       totalPrice += itemTotal;
       vesselIds.push(...sel.vesselIds);
 
@@ -992,10 +1234,15 @@ export async function bulkSellVessels() {
       console.error('Error broadcasting sale summary:', error);
     }
 
+    // Clear cart and reload vessels
     selectedSellVessels = [];
     clearSellCartCache();
     updateBulkSellButton();
+
+    // Reload the vessel list to remove sold vessels
     await loadUserVesselsForSale();
+
+    showSideNotification(`Successfully sold ${totalVessels} vessels for $${formatNumber(totalPrice)}`, 'success');
 
   } catch (error) {
     console.error('[Vessel Selling] Bulk sell error:', error);

@@ -257,6 +257,7 @@ textarea:focus {
 
 .delete-chat-btn:hover {
   animation: shake-trash var(--anim-duration-fast) ease-in-out infinite;
+  background: transparent;
 }
 
 /* ============================================
@@ -525,10 +526,11 @@ textarea:focus {
 }
 
 .message-bubble.system {
-  max-width: 900px;
+  max-width: 100%;
   align-self: center;
-  background: transparent;
-  padding: 0;
+  background: var(--color-gray-600);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-15);
 }
 
 .message-bubble.hijacking {

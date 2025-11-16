@@ -44,7 +44,17 @@
 }
 
 .messenger-window-narrow {
+  width: auto;
+  min-width: 280px;
   max-width: 400px;
+  min-height: 0;
+}
+
+/* System notification window - auto-sizes to content */
+.messenger-window-system {
+  width: fit-content;
+  min-width: 280px;
+  max-width: 600px;
   min-height: 0;
 }
 
@@ -54,6 +64,12 @@
   max-width: calc((600px / 2) + 40px) !important;
   min-width: 320px !important;
   min-height: 0 !important;
+}
+
+/* Sell vessels window - wider to accommodate vessel cards with sell prices */
+.messenger-window-sell-vessels {
+  max-width: 800px !important;
+  width: 95% !important;
 }
 
 .messenger-header {
@@ -304,6 +320,11 @@
 
 .confirm-dialog-narrow {
   max-width: 400px;
+}
+
+.shopping-cart-dialog {
+  max-width: 600px; /* Narrower for better center */
+  min-width: 500px;
 }
 
 .confirm-dialog-header {
@@ -771,4 +792,157 @@
   font-size: var(--font-size-14);
   font-style: italic;
   margin-top: var(--spacing-20);
+}
+
+/* Invoice-style shopping cart */
+.invoice-header {
+  border-bottom: 2px solid var(--color-border);
+  padding-bottom: var(--spacing-12);
+}
+
+.invoice-body {
+  padding: var(--spacing-16);
+}
+
+.invoice-header-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px 30px;
+  gap: var(--spacing-8);
+  padding: var(--spacing-8) 0;
+  border-bottom: 1px solid var(--color-border);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  font-size: var(--font-size-13);
+}
+
+.invoice-line {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px 30px;
+  gap: var(--spacing-8);
+  align-items: center;
+  padding: var(--spacing-8) 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.invoice-line:hover {
+  background: var(--color-bg-hover);
+}
+
+.invoice-qty {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-4);
+}
+
+.vessel-prices-list {
+  font-size: var(--font-size-12);
+  line-height: 1.4;
+  font-family: monospace;
+  text-align: right;
+}
+
+.qty-btn-small {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  border-radius: var(--radius-4);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-10);
+  transition: all 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.qty-btn-small:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-info);
+}
+
+.qty-value {
+  min-width: 20px;
+  height: 14px;
+  text-align: center;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-10);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.invoice-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  font-size: var(--font-size-13);
+}
+
+.invoice-unit-price,
+.invoice-total {
+  text-align: right;
+  font-family: monospace;
+}
+
+.remove-btn-small {
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  font-size: var(--font-size-12);
+  opacity: 0.6;
+  transition: opacity 0.2s;
+  padding: 0;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-btn-small:hover {
+  opacity: 1;
+}
+
+.invoice-separator {
+  border-top: 2px solid var(--color-border);
+  margin: var(--spacing-16) 0;
+}
+
+.invoice-totals {
+  padding: var(--spacing-12) 0;
+  text-align: right;
+}
+
+.invoice-total-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-20);
+  padding: var(--spacing-4) 0;
+}
+
+.invoice-total-label {
+  color: var(--color-text-secondary);
+}
+
+.invoice-total-value {
+  font-weight: var(--font-weight-semibold);
+  min-width: 100px;
+  text-align: right;
+  font-family: monospace;
+}
+
+.invoice-total-row.grand-total {
+  font-size: var(--font-size-18);
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--spacing-8);
+  margin-top: var(--spacing-8);
+}
+
+.invoice-total-row.grand-total .invoice-total-value {
+  color: var(--color-success);
 }

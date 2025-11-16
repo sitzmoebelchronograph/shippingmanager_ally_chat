@@ -1306,17 +1306,21 @@ function getCapacityDisplay(vessel) {
   if (vessel.capacity_type === 'container') {
     // Container vessels - capacity_max can be number or object {dry, refrigerated}
     if (typeof vessel.capacity_max === 'object') {
-      // Use ?? 0 as empty vessels (drydock, no cargo) legitimately have 0 capacity used
-      const capacity = Math.max(vessel.capacity_max.dry ?? 0, vessel.capacity_max.refrigerated ?? 0);
-      return `${formatNumber(capacity)} TEU`;
+      // Total capacity is dry + refrigerated (not max of either)
+      const dry = vessel.capacity_max.dry ?? 0;
+      const ref = vessel.capacity_max.refrigerated ?? 0;
+      const total = dry + ref;
+      return `${formatNumber(total)} TEU`;
     }
     return `${formatNumber(vessel.capacity_max ?? 0)} TEU`;
   } else if (vessel.capacity_type === 'tanker') {
     // Tanker vessels - capacity_max can be number or object {crude_oil, fuel}
     if (typeof vessel.capacity_max === 'object') {
-      // Use ?? 0 as empty vessels (drydock, no cargo) legitimately have 0 capacity used
-      const capacity = Math.max(vessel.capacity_max.crude_oil ?? 0, vessel.capacity_max.fuel ?? 0);
-      return `${formatNumber(capacity)} bbl`;
+      // Total capacity is fuel + crude (not max of either)
+      const fuel = vessel.capacity_max.fuel ?? 0;
+      const crude = vessel.capacity_max.crude_oil ?? 0;
+      const total = fuel + crude;
+      return `${formatNumber(total)} bbl`;
     }
     return `${formatNumber(vessel.capacity_max ?? 0)} bbl`;
   } else {

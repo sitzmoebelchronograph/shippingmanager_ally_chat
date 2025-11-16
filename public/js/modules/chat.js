@@ -28,7 +28,7 @@
  * @requires api - Backend API calls for chat data and company names
  */
 
-import { escapeHtml, showSideNotification, handleNotifications, showNotification, formatNumber, showChatNotification } from './utils.js';
+import { escapeHtml, showSideNotification, handleNotifications, showNotification, formatNumber, showChatNotification, getFuelPriceClass, getCO2PriceClass } from './utils.js';
 import { getCompanyNameCached, fetchChat, sendChatMessage, fetchAllianceMembers, invalidateVesselCache } from './api.js';
 import { updateEventDiscount } from './forecast-calendar.js';
 import { updateEventData } from './event-info.js';
@@ -950,12 +950,20 @@ function handlePriceUpdate(data) {
   const fuelPriceDisplay = document.getElementById('fuelPriceDisplay');
   // Only update if we have a valid price (> 0), otherwise keep last known value
   if (fuelPriceDisplay && fuel !== undefined && fuel > 0) {
-    // Build price text with optional discount badge
-    let priceText = `$${fuel}/t`;
+    // Clear and rebuild using DOM manipulation
+    fuelPriceDisplay.textContent = '';
+
+    // Add price text
+    fuelPriceDisplay.appendChild(document.createTextNode(`$${fuel}/t`));
+
+    // Add discount badge if applicable
     if (eventDiscount && eventDiscount.type === 'fuel') {
-      priceText += ` <span class="discount-badge">-${eventDiscount.percentage}%</span>`;
+      const discountBadge = document.createElement('span');
+      discountBadge.className = 'discount-badge';
+      discountBadge.textContent = `-${eventDiscount.percentage}%`;
+      fuelPriceDisplay.appendChild(document.createTextNode(' '));
+      fuelPriceDisplay.appendChild(discountBadge);
     }
-    fuelPriceDisplay.innerHTML = priceText;
 
     // Apply forecast color classes
     fuelPriceDisplay.className = ''; // Clear existing classes
@@ -967,16 +975,8 @@ function handlePriceUpdate(data) {
     if (settings && settings.fuelThreshold && fuel < settings.fuelThreshold) {
       fuelPriceDisplay.className = 'price-pulse-alert';
     } else {
-      // Apply standard color based on price ranges
-      if (fuel >= 800) {
-        fuelPriceDisplay.className = 'fuel-red';
-      } else if (fuel >= 600) {
-        fuelPriceDisplay.className = 'fuel-orange';
-      } else if (fuel >= 400) {
-        fuelPriceDisplay.className = 'fuel-blue';
-      } else if (fuel >= 1) {
-        fuelPriceDisplay.className = 'fuel-green';
-      }
+      // Apply standard color based on price ranges (using central function)
+      fuelPriceDisplay.className = getFuelPriceClass(fuel);
     }
   }
 
@@ -984,12 +984,20 @@ function handlePriceUpdate(data) {
   // Only update if we have a VALID price from API (not 0, not undefined, not null)
   // If invalid, keep the last known cached value - DO NOT show fake values
   if (co2PriceDisplay && co2 !== undefined && co2 !== null && co2 !== 0) {
-    // Build price text with optional discount badge
-    let priceText = `$${co2}/t`;
+    // Clear and rebuild using DOM manipulation
+    co2PriceDisplay.textContent = '';
+
+    // Add price text
+    co2PriceDisplay.appendChild(document.createTextNode(`$${co2}/t`));
+
+    // Add discount badge if applicable
     if (eventDiscount && eventDiscount.type === 'co2') {
-      priceText += ` <span class="discount-badge">-${eventDiscount.percentage}%</span>`;
+      const discountBadge = document.createElement('span');
+      discountBadge.className = 'discount-badge';
+      discountBadge.textContent = `-${eventDiscount.percentage}%`;
+      co2PriceDisplay.appendChild(document.createTextNode(' '));
+      co2PriceDisplay.appendChild(discountBadge);
     }
-    co2PriceDisplay.innerHTML = priceText;
 
     // Apply forecast color classes
     co2PriceDisplay.className = ''; // Clear existing classes
@@ -1907,6 +1915,37 @@ async function handleAutoCoopNoTargets(data) {
  */
 function handleBunkerUpdate(data) {
   const { fuel, co2, cash, points, maxFuel, maxCO2 } = data;
+
+  // Check if this is a cash-only update (from vessel purchase)
+  const isCashOnlyUpdate = cash !== undefined && fuel === undefined && co2 === undefined;
+
+  if (isCashOnlyUpdate) {
+    // Cash-only update - just update the cash display
+    if (typeof cash === 'number' && !isNaN(cash)) {
+      updateCurrentCash(cash);
+      const cashDisplay = document.getElementById('cashDisplay');
+      if (cashDisplay) {
+        cashDisplay.textContent = `$${formatNumber(cash)}`;
+      }
+      if (window.DEBUG_MODE) {
+        console.log(`[Bunker Update] Cash-only update: $${cash.toLocaleString()}`);
+      }
+    }
+    return; // Don't process fuel/co2 for cash-only updates
+  }
+
+  // CRITICAL: Validate fuel and co2 are valid numbers before ANY usage
+  // If invalid, log error and RETURN without updating display (keep previous values)
+  if (typeof fuel !== 'number' || isNaN(fuel) || fuel === null || fuel === undefined) {
+    console.error('[Bunker Update] ERROR: Invalid fuel value received:', fuel, 'Full data:', data);
+    return; // DON'T update display with invalid data
+  }
+
+  if (typeof co2 !== 'number' || isNaN(co2) || co2 === null || co2 === undefined) {
+    console.error('[Bunker Update] ERROR: Invalid co2 value received:', co2, 'Full data:', data);
+    return; // DON'T update display with invalid data
+  }
+
   updateDataCache.bunker = { fuel, co2, cash, points };
   if (AUTOPILOT_LOG_LEVEL === 'detailed') {
     console.log(`[Autopilot] Bunker update: Fuel=${Math.floor(fuel)}t, CO2=${Math.floor(co2)}t, Cash=$${Math.floor(cash).toLocaleString()}, Points=${points}`);
@@ -1930,7 +1969,7 @@ function handleBunkerUpdate(data) {
   // CRITICAL: Only update if we have valid maxFuel (> 0) from API
   // DO NOT show "0 t / 0 t" on initial connect - keep empty until real data arrives
   if (fuelDisplay && maxFuel > 0) {
-    fuelDisplay.innerHTML = `${formatNumber(Math.floor(fuel))} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxFuel))} <b>t</b>`;
+    fuelDisplay.textContent = `${formatNumber(Math.floor(fuel))} t / ${formatNumber(Math.floor(maxFuel))} t`;
 
     // Update fill bar and button styling with CSS classes
     if (fuelFill && fuelBtn) {
@@ -1967,16 +2006,7 @@ function handleBunkerUpdate(data) {
       // Price classes: fuel-red, fuel-orange, fuel-blue, fuel-green (text color only)
       const fuelPrice = window.updateDataCache?.prices?.fuelPrice || window.updateDataCache?.prices?.fuel;
       if (fuelPrice !== undefined && fuelPrice > 0) {
-        let priceClass = '';
-        if (fuelPrice >= 800) {
-          priceClass = 'fuel-red';
-        } else if (fuelPrice >= 600) {
-          priceClass = 'fuel-orange';
-        } else if (fuelPrice >= 400) {
-          priceClass = 'fuel-blue';
-        } else if (fuelPrice >= 1) {
-          priceClass = 'fuel-green';
-        }
+        const priceClass = getFuelPriceClass(fuelPrice);
 
         // Remove ONLY price-color classes (do NOT remove fill-level classes!)
         fuelBtn.classList.remove('fuel-red', 'fuel-orange', 'fuel-blue', 'fuel-green');
@@ -1993,7 +2023,7 @@ function handleBunkerUpdate(data) {
   // DO NOT show "0 t / 0 t" on initial connect - keep empty until real data arrives
   if (co2Display && maxCO2 > 0) {
     const co2Value = co2 < 0 ? `-${formatNumber(Math.floor(Math.abs(co2)))}` : formatNumber(Math.floor(co2));
-    co2Display.innerHTML = `${co2Value} <b>t</b> <b>/</b> ${formatNumber(Math.floor(maxCO2))} <b>t</b>`;
+    co2Display.textContent = `${co2Value} t / ${formatNumber(Math.floor(maxCO2))} t`;
 
     // Update fill bar and button styling with CSS classes
     if (co2Fill && co2Btn) {
@@ -2063,7 +2093,7 @@ function handleBunkerUpdate(data) {
   // Update cash display - only if we have valid bunker data (maxFuel or maxCO2 > 0)
   const cashDisplay = document.getElementById('cashDisplay');
   if (cashDisplay && (maxFuel > 0 || maxCO2 > 0)) {
-    cashDisplay.innerHTML = `$${formatNumber(Math.floor(cash))}`;
+    cashDisplay.textContent = `$${formatNumber(Math.floor(cash))}`;
   }
 
   // Update points display (diamonds)
@@ -2258,16 +2288,16 @@ function handleCampaignStatusUpdate(data) {
   updateBadge('campaignsCount', activeCount, activeCount < 3, 'RED');
 
   // Update header display
-  const campaignsHeaderDisplay = document.getElementById('campaignsHeaderDisplay');
-  if (campaignsHeaderDisplay) {
-    campaignsHeaderDisplay.textContent = activeCount;
+  const campaignsDisplay = document.getElementById('campaignsDisplay');
+  if (campaignsDisplay) {
+    campaignsDisplay.textContent = activeCount;
     // Green if >= 3, red if < 3
     if (activeCount >= 3) {
-      campaignsHeaderDisplay.classList.add('text-success');
-      campaignsHeaderDisplay.classList.remove('text-danger');
+      campaignsDisplay.classList.add('text-success');
+      campaignsDisplay.classList.remove('text-danger');
     } else {
-      campaignsHeaderDisplay.classList.add('text-danger');
-      campaignsHeaderDisplay.classList.remove('text-success');
+      campaignsDisplay.classList.add('text-danger');
+      campaignsDisplay.classList.remove('text-success');
     }
   }
 
@@ -2526,22 +2556,35 @@ function handleHeaderDataUpdate(data) {
       const free = anchor.available;
       const pending = anchor.pending || 0;  // From settings.lastAnchorPointPurchase
 
-      // Build display string with labels
-      // Total: RED if free > 0 (slots available = bad), GREEN if free = 0 (all slots used = good)
-      const totalColor = free > 0 ? '#ef4444' : '#4ade80';
-      let html = `Total <span style="color: ${totalColor};">${total}</span>`;
+      // Clear and rebuild display using DOM manipulation
+      anchorSlotsDisplay.textContent = '';
 
-      // Free slots - only show if > 0, in red
+      // Total label
+      anchorSlotsDisplay.appendChild(document.createTextNode('Total '));
+
+      // Total value with appropriate class
+      const totalSpan = document.createElement('span');
+      totalSpan.textContent = total;
+      totalSpan.className = free > 0 ? 'anchor-total-bad' : 'anchor-total-good';
+      anchorSlotsDisplay.appendChild(totalSpan);
+
+      // Free slots - only show if > 0
       if (free > 0) {
-        html += ` ⚓ Free <span style="color: #ef4444;">${free}</span>`;
+        anchorSlotsDisplay.appendChild(document.createTextNode(' ⚓ Free '));
+        const freeSpan = document.createElement('span');
+        freeSpan.textContent = free;
+        freeSpan.className = 'anchor-free';
+        anchorSlotsDisplay.appendChild(freeSpan);
       }
 
-      // Pending - only show if > 0, in orange
+      // Pending - only show if > 0
       if (pending > 0) {
-        html += ` ⚓ Pending <span style="color: #fbbf24;">${pending}</span>`;
+        anchorSlotsDisplay.appendChild(document.createTextNode(' ⚓ Pending '));
+        const pendingSpan = document.createElement('span');
+        pendingSpan.textContent = pending;
+        pendingSpan.className = 'anchor-pending';
+        anchorSlotsDisplay.appendChild(pendingSpan);
       }
-
-      anchorSlotsDisplay.innerHTML = html;
     }
 
     // NOTE: Removed auto-refresh of vessel cards - overlays should not be auto-refreshed

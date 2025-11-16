@@ -40,6 +40,12 @@ export function filterVessels(vessels, filterType) {
       console.log(`[Filter] Found ${arrivingSoon.length} vessels arriving in <10 min`);
       return arrivingSoon;
 
+    case 'enroute_vessels':
+      // Vessels that are currently enroute (have active routes)
+      const enrouteVessels = vessels.filter(v => v.status === 'enroute');
+      console.log(`[Filter] Found ${enrouteVessels.length} vessels enroute`);
+      return enrouteVessels;
+
     case 'arrived_vessels':
       // Vessels that have arrived at port (status: 'port') and are ready to depart (not parked)
       const arrivedVessels = vessels.filter(v => v.status === 'port' && !v.is_parked);
@@ -239,6 +245,7 @@ export function getVesselFilterOptions() {
 
   return [
     { value: 'all_vessels', label: 'All My Vessels' },
+    { value: 'enroute_vessels', label: 'Vessels Enroute' },
     { value: 'vessels_arrive_soon', label: 'Arriving in <10 min' },
     { value: 'arrived_vessels', label: 'Arrived Vessels' },
     { value: 'anchored_vessels', label: 'Anchored Vessels' },

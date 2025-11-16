@@ -577,7 +577,7 @@
 
   /* Hide coop and campaigns in mobile header */
   #coopContainer,
-  .header-info-displays > div:has(#campaignsHeaderDisplay) {
+  .header-info-displays > div:has(#campaignsDisplay) {
     display: none !important;
   }
 

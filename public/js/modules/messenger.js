@@ -201,9 +201,13 @@ function showSystemMessagesSelection(allChats, ownUserId) {
         e.stopPropagation();
         const chatIndex = parseInt(btn.dataset.chatIndex);
         const chatToDelete = sortedChats[chatIndex];
-        await deleteChatWithConfirmation(chatToDelete);
-        // Refresh the list
-        showSystemMessagesSelection(allChats, ownUserId);
+        const chatItem = btn.closest('.chat-selection-item');
+
+        const wasDeleted = await deleteChatWithConfirmation(chatToDelete);
+        // Remove element immediately from DOM if deleted
+        if (wasDeleted && chatItem) {
+          chatItem.remove();
+        }
       });
     });
   }
@@ -275,16 +279,13 @@ function showChatSelection(targetCompanyName, targetUserId, chats, ownUserId) {
       e.stopPropagation();
       const chatIndex = parseInt(btn.dataset.chatIndex);
       const chatToDelete = sortedChats[chatIndex];
+      const chatItem = btn.closest('.chat-selection-item');
 
-      await deleteChatWithConfirmation(chatToDelete);
-      // Refresh the list
-      const data = await fetchMessengerChats();
-      allPrivateChats = data.chats;
-      const userChats = allPrivateChats.filter(chat => {
-        if (chat.system_chat) return false;
-        return chat.participants_string === targetCompanyName;
-      });
-      showChatSelection(targetCompanyName, targetUserId, userChats, ownUserId);
+      const wasDeleted = await deleteChatWithConfirmation(chatToDelete);
+      // Remove element immediately from DOM if deleted
+      if (wasDeleted && chatItem) {
+        chatItem.remove();
+      }
     });
   });
 
@@ -310,12 +311,13 @@ export async function openExistingChat(targetCompanyName, targetUserId, chat, ow
 
   // Set window size based on chat type
   const messengerWindow = document.querySelector('#messengerOverlay .messenger-window');
+  messengerWindow.classList.remove('messenger-window-narrow', 'messenger-window-system');
   if (isSystemChat && chat.body === 'vessel_got_hijacked') {
     // Pirate Demands = narrow template (400px)
     messengerWindow.classList.add('messenger-window-narrow');
-  } else {
-    // Private chats = normal template (wide with min-height)
-    messengerWindow.classList.remove('messenger-window-narrow');
+  } else if (isSystemChat) {
+    // System notifications = auto-size to content
+    messengerWindow.classList.add('messenger-window-system');
   }
 
   // Set title based on chat type
@@ -392,7 +394,7 @@ export function openNewChat(targetCompanyName, targetUserId) {
 
   // New conversation = normal template (wide with min-height)
   const messengerWindow = document.querySelector('#messengerOverlay .messenger-window');
-  messengerWindow.classList.remove('messenger-window-narrow');
+  messengerWindow.classList.remove('messenger-window-narrow', 'messenger-window-system');
 
   document.getElementById('messengerTitle').textContent = `🗣️ ${targetCompanyName} - New Conversation`;
   document.getElementById('subjectInputWrapper').classList.remove('hidden');
@@ -955,13 +957,95 @@ function formatSystemMessage(body, values, subject, caseDetails, messageTimestam
     `;
   }
 
+  // User applied to join alliance
+  if (body === 'user_applied_to_join_alliance_message' && v.company_name) {
+    return `
+      <div style="color: #fbbf24; font-size: 16px; font-weight: bold;">Ahoy Captain!</div>
+      <div style="margin-top: 12px; line-height: 1.6;">
+        <strong>${escapeHtml(v.company_name)}</strong> has applied to join your alliance.<br><br>
+        Respond to him in the recruitment section in the alliance menu.
+      </div>
+    `;
+  }
+
+  // Alliance interim CEO notification
+  if (body === 'alliance_interrim_ceo' && v.allianceName) {
+    const allianceName = escapeHtml(v.allianceName);
+    const ceoName = escapeHtml(v.currentCeo || 'the CEO');
+    const buttonId = `interimCeoThankBtn_${Date.now()}`;
+
+    // Attach event listener after render
+    setTimeout(() => {
+      const btn = document.getElementById(buttonId);
+      if (btn) {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          btn.textContent = 'Sending...';
+
+          try {
+            // Fetch alliance members to get CEO user ID
+            const membersResponse = await fetch('/api/alliance/members');
+            const membersData = await membersResponse.json();
+
+            if (!membersResponse.ok) {
+              throw new Error('Failed to fetch alliance members');
+            }
+
+            // Find CEO in members list
+            const ceoMember = membersData.members?.find(m =>
+              m.company_name === v.currentCeo || m.role === 'ceo'
+            );
+
+            if (!ceoMember) {
+              throw new Error('CEO not found in alliance members');
+            }
+
+            // Send thank you message to alliance chat with CEO mention
+            const thankYouMessage = `[${ceoMember.user_id}] Thank you for your trust!`;
+
+            const sendResponse = await fetch('/api/alliance/send-message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: thankYouMessage })
+            });
+
+            if (!sendResponse.ok) {
+              throw new Error('Failed to send message');
+            }
+
+            btn.textContent = 'Message Sent!';
+            btn.style.background = 'var(--color-success-20)';
+            btn.style.borderColor = 'var(--color-success-30)';
+          } catch (error) {
+            console.error('[Interim CEO] Error sending thank you:', error);
+            btn.textContent = 'Failed to send';
+            btn.style.background = 'var(--color-danger-20)';
+            btn.disabled = false;
+          }
+        });
+      }
+    }, 100);
+
+    return `
+      <div style="color: #fbbf24; font-size: 18px; font-weight: bold;">🎉 Congratulations!</div>
+      <div style="margin-top: 12px; line-height: 1.6;">
+        You have been made <strong>Interim CEO</strong> in your alliance <strong>${allianceName}</strong>
+        as the current CEO <strong>${ceoName}</strong> has been inactive.<br><br>
+        Once he is active again he will resume his role, but until then you're in charge!
+      </div>
+      <div style="margin-top: 16px;">
+        <button id="${buttonId}" style="background: var(--color-info-20); border: 1px solid var(--color-info-30); color: var(--color-info-lighter); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">
+          Say Thank You
+        </button>
+      </div>
+    `;
+  }
+
   // Tutorial/intro messages
   if (body.startsWith('intro_pm_')) {
     return `
       <div style="color: #60a5fa;">📚 Tutorial Message</div>
-      <div style="margin-top: 8px;">
-        ${subject ? escapeHtml(subject) : body}
-      </div>
+      ${subject ? `<div style="margin-top: 8px;">${escapeHtml(subject)}</div>` : ''}
     `;
   }
 
@@ -1161,10 +1245,13 @@ export async function showAllChats() {
           e.stopPropagation();
           const chatIndex = parseInt(btn.dataset.chatIndex);
           const chatToDelete = sortedChats[chatIndex];
+          const chatItem = btn.closest('.chat-selection-item');
 
-          await deleteChatWithConfirmation(chatToDelete);
-          // Refresh the list after deletion
-          showAllChats();
+          const wasDeleted = await deleteChatWithConfirmation(chatToDelete);
+          // Remove element immediately from DOM if deleted
+          if (wasDeleted && chatItem) {
+            chatItem.remove();
+          }
         });
       });
     }
@@ -1374,7 +1461,7 @@ async function deleteChatWithConfirmation(chat) {
     cancelText: 'Cancel'
   });
 
-  if (!confirmed) return;
+  if (!confirmed) return false;
 
   try {
     // Extract case_id from values if this is a hijacking message
@@ -1383,13 +1470,15 @@ async function deleteChatWithConfirmation(chat) {
       : null;
 
     await apiDeleteChat(chat.id, isSystemChat, caseId);
-    showAllChats();
 
     if (window.debouncedUpdateUnreadBadge) {
       window.debouncedUpdateUnreadBadge();
     }
+
+    return true;
   } catch (error) {
     alert(`Error deleting chat: ${error.message}`);
+    return false;
   }
 }
 

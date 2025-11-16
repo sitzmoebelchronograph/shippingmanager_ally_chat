@@ -23,11 +23,12 @@ let requestedStartPage = null; // Requested start page for navigation (null = au
 
 /**
  * Color classes for fuel prices
+ * Uses same thresholds as central function in utils.js
  */
 function getFuelClass(price) {
-    if (price >= 800) return 'fuel-red';
-    if (price >= 600) return 'fuel-orange';
-    if (price >= 400) return 'fuel-blue';
+    if (price > 750) return 'fuel-red';
+    if (price >= 650) return 'fuel-orange';
+    if (price >= 500) return 'fuel-blue';
     if (price >= 1) return 'fuel-green';
     return '';
 }

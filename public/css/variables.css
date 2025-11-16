@@ -20,7 +20,9 @@
   --color-danger-darkest: #7f1d1d;
 
   /* Red RGBA - Background/Border variants */
+  --color-danger-04: rgba(239, 68, 68, 0.04);
   --color-danger-5: rgba(239, 68, 68, 0.05);
+  --color-danger-08: rgba(239, 68, 68, 0.08);
   --color-danger-10: rgba(239, 68, 68, 0.1);
   --color-danger-20: rgba(239, 68, 68, 0.2);
   --color-danger-30: rgba(239, 68, 68, 0.3);
@@ -74,7 +76,9 @@
   --color-success-text-light: #86efac;
 
   /* Green RGBA - Background/Border variants */
+  --color-success-04: rgba(74, 222, 128, 0.04);
   --color-success-5: rgba(74, 222, 128, 0.05);
+  --color-success-08: rgba(74, 222, 128, 0.08);
   --color-success-10: rgba(74, 222, 128, 0.1);
   --color-success-30: rgba(74, 222, 128, 0.3);
   --color-success-50: rgba(74, 222, 128, 0.5);

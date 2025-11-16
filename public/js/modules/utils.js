@@ -71,6 +71,44 @@ export function formatNumber(num) {
 }
 
 /**
+ * Determines the color class for fuel prices based on thresholds.
+ * Central function to ensure consistency across all components.
+ *
+ * @param {number} price - Fuel price in $/ton
+ * @returns {string} CSS class name for color styling
+ *
+ * @example
+ * getFuelPriceClass(790); // Returns: "fuel-orange"
+ * getFuelPriceClass(450); // Returns: "fuel-green"
+ */
+export function getFuelPriceClass(price) {
+  if (price > 750) return 'fuel-red';
+  if (price >= 650) return 'fuel-orange';
+  if (price >= 500) return 'fuel-blue';
+  if (price >= 1) return 'fuel-green';
+  return '';
+}
+
+/**
+ * Determines the color class for CO2 prices based on thresholds.
+ * Central function to ensure consistency across all components.
+ *
+ * @param {number} price - CO2 price in $/ton
+ * @returns {string} CSS class name for color styling
+ *
+ * @example
+ * getCO2PriceClass(18); // Returns: "co2-orange"
+ * getCO2PriceClass(7);  // Returns: "co2-green"
+ */
+export function getCO2PriceClass(price) {
+  if (price >= 20) return 'co2-red';
+  if (price >= 15) return 'co2-orange';
+  if (price >= 10) return 'co2-blue';
+  if (price >= 1) return 'co2-green';
+  return '';
+}
+
+/**
  * Shows a side notification (slides in from right, auto-dismisses after duration)
  *
  * @param {string} message - HTML message content
