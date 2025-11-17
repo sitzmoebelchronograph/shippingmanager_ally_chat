@@ -5,9 +5,8 @@ Complete guide for setting up ShippingManager CoPilot from source code on Window
 ## Windows End-Users
 
 **If you're a Windows user**, you don't need this guide! Use the portable .exe instead:
-1. Download `ShippingManagerCoPilot-v0.1.0-Portable.zip`
-2. Extract the ZIP file
-3. Run `ShippingManagerCoPilot.exe`
+1. Download `ShippingManagerCoPilot-v0.1.0.exe`
+2. Run installer :)
 
 This guide is for **developers** and **Linux/Mac users** who need to run from source.
 
