@@ -41,9 +41,9 @@
 }
 
 #coopOverlay .messenger-window {
-  width: 30vw;
-  max-width: 30vw;
-  min-width: 30vw;
+  width: 50%;
+  max-width: 50%;
+  min-width: 50%;
   height: 90vh;
   max-height: 90vh;
   min-height: 90vh;

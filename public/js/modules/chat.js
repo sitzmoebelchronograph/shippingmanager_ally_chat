@@ -2655,7 +2655,11 @@ async function handleAllianceIndexReady(data) {
 
   console.log(`[Alliance Search] Index ready: ${total} alliances`);
 
-  showNotification('success', `Alliance Index completed<br>Now you're able to search for alliances`);
+  showNotification('Alliance Database Ready', {
+    body: `Successfully indexed ${formatNumber(total)} alliances\nYou can now search for alliances in the Search tab`,
+    icon: '/favicon.ico',
+    tag: 'alliance-index-ready'
+  });
 
   if (getCurrentTab() === 'search') {
     await refreshCurrentTab();

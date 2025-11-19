@@ -230,15 +230,15 @@ td.coop-stat-received-hist {
 
 .alliance-coop-tabs {
   flex-wrap: nowrap;
-  overflow-x: auto;
+  overflow-x: hidden;
   position: relative;
   max-width: 100%;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .alliance-coop-tabs .tab-button {
-  padding: var(--spacing-10) var(--spacing-8);
+  padding: var(--spacing-10) var(--spacing-16);
   font-size: var(--font-size-13);
   white-space: nowrap;
   flex-shrink: 0;
