@@ -1567,6 +1567,17 @@ window.acceptHijackingPrice = async function(caseId, amount) {
 
   if (!confirmed) return;
 
+  // Disable all buttons in the hijacking actions section immediately
+  const actionsDiv = document.getElementById(`hijacking-actions-${caseId}`);
+  if (actionsDiv) {
+    const buttons = actionsDiv.querySelectorAll('button');
+    buttons.forEach(btn => {
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+    });
+  }
+
   try {
     // Pay the ransom (not submit offer!)
     const response = await fetch('/api/hijacking/pay', {
@@ -1581,6 +1592,9 @@ window.acceptHijackingPrice = async function(caseId, amount) {
     if (!response.ok) {
       throw new Error(data.error || 'Failed to pay ransom');
     }
+
+    // Extract payment verification from response
+    const paymentVerification = data.payment_verification;
 
     // Reload the case details to get the REAL status from API
     const caseResponse = await fetch('/api/hijacking/get-case', {
@@ -1621,8 +1635,30 @@ window.acceptHijackingPrice = async function(caseId, amount) {
       // Re-render the message with updated case details
       await displaySystemMessage(chat);
 
-      // Check if payment was actually successful (paid_amount OR status = 'solved')
-      if (updatedCase.paid_amount !== null || updatedCase.status === 'solved') {
+      // Show notification with verification details if available
+      if (paymentVerification) {
+        if (paymentVerification.verified) {
+          showSideNotification(
+            `<strong>✓ Payment Verified</strong><br><br>` +
+            `Expected: $${paymentVerification.expected_amount.toLocaleString()}<br>` +
+            `Paid: $${paymentVerification.actual_paid.toLocaleString()}<br>` +
+            `Cash Before: $${paymentVerification.cash_before.toLocaleString()}<br>` +
+            `Cash After: $${paymentVerification.cash_after.toLocaleString()}`,
+            'success',
+            6000
+          );
+        } else {
+          showSideNotification(
+            `<strong>⚠️ Payment Verification Failed</strong><br><br>` +
+            `Expected: $${paymentVerification.expected_amount.toLocaleString()}<br>` +
+            `Actually Paid: $${paymentVerification.actual_paid.toLocaleString()}<br>` +
+            `Cash Before: $${paymentVerification.cash_before.toLocaleString()}<br>` +
+            `Cash After: $${paymentVerification.cash_after.toLocaleString()}`,
+            'error',
+            8000
+          );
+        }
+      } else if (updatedCase.paid_amount !== null || updatedCase.status === 'solved') {
         const finalAmount = updatedCase.paid_amount || updatedCase.requested_amount;
         showSideNotification(
           `<strong>✓ Ransom Paid!</strong><br><br>` +
@@ -1646,6 +1682,16 @@ window.acceptHijackingPrice = async function(caseId, amount) {
   } catch (error) {
     console.error('[Hijacking] Error:', error);
     showSideNotification(`Error: ${error.message}`, 'error');
+
+    // Re-enable buttons on error
+    if (actionsDiv) {
+      const buttons = actionsDiv.querySelectorAll('button');
+      buttons.forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      });
+    }
   }
 };
 

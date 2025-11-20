@@ -295,7 +295,13 @@ function escapeHtml(text) {
  * @returns {string} Formatted date string
  */
 function formatTimestamp(timestamp) {
+  if (!timestamp || timestamp === 0) {
+    return 'Unknown';
+  }
   const date = new Date(timestamp * 1000);
+  if (isNaN(date.getTime())) {
+    return 'Unknown';
+  }
   return date.toLocaleString(undefined, {
     year: 'numeric',
     month: 'short',
