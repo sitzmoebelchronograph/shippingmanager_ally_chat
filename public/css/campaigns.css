@@ -191,8 +191,9 @@
 
 #eventBannerContainer {
   position: absolute;
-  top: var(--spacing-2);
-  right: var(--spacing-2);
+  right: var(--spacing-20);
+  top: 42px;
+  z-index: 10;
 }
 
 /* ============================================
@@ -203,9 +204,9 @@
   background: var(--gradient-event) !important;
   border: 1px solid var(--color-success-40) !important;
   color: var(--color-success) !important;
-  padding: var(--spacing-3) var(--spacing-3) !important;
-  border-radius: var(--radius-4) !important;
-  font-size: var(--font-size-9) !important;
+  padding: var(--spacing-6) var(--spacing-12) !important;
+  border-radius: var(--radius-6) !important;
+  font-size: var(--font-size-11) !important;
   font-weight: var(--font-weight-semibold) !important;
   cursor: pointer !important;
   transition: var(--transition-medium) !important;
@@ -215,6 +216,7 @@
   height: auto !important;
   display: inline-flex !important;
   align-items: center !important;
+  white-space: nowrap !important;
 }
 
 .event-banner-btn:hover {
@@ -224,24 +226,22 @@
 
 .event-banner-content {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 1px;
-  max-width: 70px;
+  gap: var(--spacing-6);
 }
 
 .event-banner-label {
-  font-size: var(--font-size-7);
+  font-size: var(--font-size-10);
   color: var(--color-success-80);
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
 }
 
 .event-banner-name {
   text-shadow: 0 0 8px var(--color-success-50);
-  font-size: var(--font-size-8);
+  font-size: var(--font-size-11);
   font-weight: var(--font-weight-bold);
-  text-align: center;
   word-wrap: break-word;
   line-height: var(--line-height-snug);
 }

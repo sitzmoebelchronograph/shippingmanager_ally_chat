@@ -27,6 +27,7 @@ const gameapi = require('../gameapi');
 const logger = require('../utils/logger');
 const config = require('../config');
 const { enrichHistoryWithFees } = require('../utils/harbor-fee-store');
+const { enrichHistoryWithContributions } = require('../utils/contribution-store');
 const { migrateHarborFeesForUser } = require('../utils/migrate-harbor-fees');
 
 const {
@@ -483,11 +484,14 @@ router.get('/vessel/:vesselId/history', async (req, res) => {
     logger.debug(`[Harbor Map] Found ${historyResponse.data.vessel_history.length} history entries for vessel ${vesselId}`);
 
     // Enrich history with harbor fees from our storage
-    const enrichedHistory = await enrichHistoryWithFees(userId, historyResponse.data.vessel_history);
+    const enrichedWithFees = await enrichHistoryWithFees(userId, historyResponse.data.vessel_history);
+
+    // Enrich history with contribution gains from our storage
+    const fullyEnriched = await enrichHistoryWithContributions(userId, enrichedWithFees);
 
     // Transform API response to match frontend expectations
     res.json({
-      history: enrichedHistory.map(trip => ({
+      history: fullyEnriched.map(trip => ({
         date: trip.created_at,
         origin: trip.route_origin,
         destination: trip.route_destination,
@@ -497,7 +501,8 @@ router.get('/vessel/:vesselId/history', async (req, res) => {
         fuel_used: trip.fuel_used,
         wear: trip.wear,
         duration: trip.duration,
-        harbor_fee: trip.harbor_fee
+        harbor_fee: trip.harbor_fee,
+        contribution: trip.contribution_gained
       }))
     });
   } catch (error) {

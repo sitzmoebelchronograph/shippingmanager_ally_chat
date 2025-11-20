@@ -190,7 +190,24 @@ async function fetchAllianceSettings() {
 async function fetchAllianceMembers() {
   const response = await fetch(window.apiUrl('/api/alliance-members'));
   if (!response.ok) throw new Error('Failed to fetch alliance members');
-  return await response.json();
+  const data = await response.json();
+
+  // DEBUG: Log first member's stats to see what API returns
+  if (data.members && data.members.length > 0) {
+    const firstMember = data.members[0];
+    console.log('[Alliance Members API] First member stats:', {
+      name: firstMember.company_name,
+      stats: {
+        last_24h: firstMember.stats?.last_24h,
+        last_season: firstMember.stats?.last_season,
+        lifetime: firstMember.stats?.lifetime
+      }
+    });
+    console.log('[Alliance Members API] Lifetime contribution:', firstMember.stats?.lifetime?.contribution);
+    console.log('[Alliance Members API] Lifetime departures:', firstMember.stats?.lifetime?.departures);
+  }
+
+  return data;
 }
 
 /**
@@ -726,7 +743,7 @@ async function loadTabContent(tabName) {
     console.error(`[Alliance Tabs] Error loading ${tabName} tab:`, error);
     const contentDiv = document.getElementById(`${tabName}Content`);
     if (contentDiv) {
-      contentDiv.innerHTML = `<p class="alliance-tab-error">Failed to load ${tabName} data. Please try again.</p>`;
+      contentDiv.innerHTML = `<p class="alliance-tab-error">Failed to load ${escapeHtml(tabName)} data. Please try again.</p>`;
     }
   }
 }
@@ -1026,33 +1043,33 @@ async function renderAllianzTab() {
     allMembers.sort((a, b) => {
       let aVal, bVal;
 
-      const aStats = a.stats || { last_24h: { contribution: 0, departures: 0 }, last_season: { contribution: 0, departures: 0 }, lifetime: { contribution: 0, departures: 0 } };
-      const bStats = b.stats || { last_24h: { contribution: 0, departures: 0 }, last_season: { contribution: 0, departures: 0 }, lifetime: { contribution: 0, departures: 0 } };
+      const aStats = a.stats;
+      const bStats = b.stats;
 
       if (sortBy === 'contribution-24h') {
-        aVal = aStats.last_24h.contribution || 0;
-        bVal = bStats.last_24h.contribution || 0;
+        aVal = aStats.last_24h.contribution;
+        bVal = bStats.last_24h.contribution;
       } else if (sortBy === 'departures-24h') {
-        aVal = aStats.last_24h.departures || 0;
-        bVal = bStats.last_24h.departures || 0;
+        aVal = aStats.last_24h.departures;
+        bVal = bStats.last_24h.departures;
       } else if (sortBy === 'contribution-season') {
-        aVal = aStats.last_season.contribution || 0;
-        bVal = bStats.last_season.contribution || 0;
+        aVal = aStats.last_season.contribution;
+        bVal = bStats.last_season.contribution;
       } else if (sortBy === 'departures-season') {
-        aVal = aStats.last_season.departures || 0;
-        bVal = bStats.last_season.departures || 0;
+        aVal = aStats.last_season.departures;
+        bVal = bStats.last_season.departures;
       } else if (sortBy === 'contribution-lifetime') {
-        aVal = aStats.lifetime.contribution || 0;
-        bVal = bStats.lifetime.contribution || 0;
+        aVal = aStats.lifetime.contribution;
+        bVal = bStats.lifetime.contribution;
       } else if (sortBy === 'departures-lifetime') {
-        aVal = aStats.lifetime.departures || 0;
-        bVal = bStats.lifetime.departures || 0;
+        aVal = aStats.lifetime.departures;
+        bVal = bStats.lifetime.departures;
       } else if (sortBy === 'joined') {
-        aVal = a.time_joined || 0;
-        bVal = b.time_joined || 0;
+        aVal = a.time_joined;
+        bVal = b.time_joined;
       } else if (sortBy === 'lastlogin') {
-        aVal = a.time_last_login || 0;
-        bVal = b.time_last_login || 0;
+        aVal = a.time_last_login;
+        bVal = b.time_last_login;
       }
 
       if (sortOrder === 'desc') {
@@ -1083,11 +1100,7 @@ async function renderAllianzTab() {
           </div>`;
       }
 
-      const stats = m.stats || {
-        last_24h: { contribution: 0, departures: 0 },
-        last_season: { contribution: 0, departures: 0 },
-        lifetime: { contribution: 0, departures: 0 }
-      };
+      const stats = m.stats;
 
       membersHtml += `
         <div class="alliance-stat-card member-card">
@@ -1756,33 +1769,33 @@ async function showAllianceDetailsModal(allianceId) {
       allMembers.sort((a, b) => {
         let aVal, bVal;
 
-        const aStats = a.stats || { last_24h: { contribution: 0, departures: 0 }, last_season: { contribution: 0, departures: 0 }, lifetime: { contribution: 0, departures: 0 } };
-        const bStats = b.stats || { last_24h: { contribution: 0, departures: 0 }, last_season: { contribution: 0, departures: 0 }, lifetime: { contribution: 0, departures: 0 } };
+        const aStats = a.stats;
+        const bStats = b.stats;
 
         if (sortBy === 'contribution-24h') {
-          aVal = aStats.last_24h.contribution || 0;
-          bVal = bStats.last_24h.contribution || 0;
+          aVal = aStats.last_24h.contribution;
+          bVal = bStats.last_24h.contribution;
         } else if (sortBy === 'departures-24h') {
-          aVal = aStats.last_24h.departures || 0;
-          bVal = bStats.last_24h.departures || 0;
+          aVal = aStats.last_24h.departures;
+          bVal = bStats.last_24h.departures;
         } else if (sortBy === 'contribution-season') {
-          aVal = aStats.last_season.contribution || 0;
-          bVal = bStats.last_season.contribution || 0;
+          aVal = aStats.last_season.contribution;
+          bVal = bStats.last_season.contribution;
         } else if (sortBy === 'departures-season') {
-          aVal = aStats.last_season.departures || 0;
-          bVal = bStats.last_season.departures || 0;
+          aVal = aStats.last_season.departures;
+          bVal = bStats.last_season.departures;
         } else if (sortBy === 'contribution-lifetime') {
-          aVal = aStats.lifetime.contribution || 0;
-          bVal = bStats.lifetime.contribution || 0;
+          aVal = aStats.lifetime.contribution;
+          bVal = bStats.lifetime.contribution;
         } else if (sortBy === 'departures-lifetime') {
-          aVal = aStats.lifetime.departures || 0;
-          bVal = bStats.lifetime.departures || 0;
+          aVal = aStats.lifetime.departures;
+          bVal = bStats.lifetime.departures;
         } else if (sortBy === 'joined') {
-          aVal = a.time_joined || 0;
-          bVal = b.time_joined || 0;
+          aVal = a.time_joined;
+          bVal = b.time_joined;
         } else if (sortBy === 'lastlogin') {
-          aVal = a.time_last_login || 0;
-          bVal = b.time_last_login || 0;
+          aVal = a.time_last_login;
+          bVal = b.time_last_login;
         }
 
         if (sortOrder === 'desc') {
@@ -3317,7 +3330,11 @@ function appendSearchResults(newAlliances) {
 
   newAlliances.forEach((alliance) => {
     const rowHtml = createAllianceRow(alliance);
-    standingsContainer.insertAdjacentHTML('beforeend', rowHtml);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = rowHtml;
+    while (tempDiv.firstChild) {
+      standingsContainer.appendChild(tempDiv.firstChild);
+    }
   });
 
   // Attach click handlers to new alliance names
@@ -3328,8 +3345,10 @@ function appendSearchResults(newAlliances) {
 
   if (searchState.hasMore) {
     if (!sentinel) {
-      resultsContainer.insertAdjacentHTML('beforeend', '<div id="allianceLazyLoadSentinel" style="height: 1px;"></div>');
-      sentinel = document.getElementById('allianceLazyLoadSentinel');
+      sentinel = document.createElement('div');
+      sentinel.id = 'allianceLazyLoadSentinel';
+      sentinel.style.height = '1px';
+      resultsContainer.appendChild(sentinel);
     }
 
     // Re-observe sentinel

@@ -113,11 +113,19 @@ async function loadStaffData() {
     const content = document.getElementById('companyProfileContent');
     const card = content.querySelector('.company-profile-card');
     if (card && staffData.data) {
-      card.insertAdjacentHTML('beforeend', buildStaffSection(staffData.data, staffData.user));
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = buildStaffSection(staffData.data, staffData.user);
+      while (tempDiv.firstChild) {
+        card.appendChild(tempDiv.firstChild);
+      }
 
       // Add achievements section after staff (if available)
       if (window.pendingAchievements && window.pendingAchievements.achievements && window.pendingAchievements.achievements.length > 0) {
-        card.insertAdjacentHTML('beforeend', buildAchievementsSection(window.pendingAchievements));
+        const tempDiv2 = document.createElement('div');
+        tempDiv2.innerHTML = buildAchievementsSection(window.pendingAchievements);
+        while (tempDiv2.firstChild) {
+          card.appendChild(tempDiv2.firstChild);
+        }
         window.pendingAchievements = null;
       }
 

@@ -39,6 +39,24 @@ let currentFilters = {
 let logEntries = [];
 
 /**
+ * Filtered log entries based on current filters
+ * @type {Array}
+ */
+let filteredLogEntries = [];
+
+/**
+ * Number of entries currently displayed
+ * @type {number}
+ */
+let displayedEntryCount = 0;
+
+/**
+ * Number of entries to load per page
+ * @type {number}
+ */
+const LOGBOOK_PAGE_SIZE = 10;
+
+/**
  * Set of expanded entry IDs
  * @type {Set<string>}
  */
@@ -181,12 +199,7 @@ async function loadLogs() {
     if (data.success) {
       logEntries = data.logs || [];
       renderLogTable();
-
-      // Update count display
-      const countEl = document.getElementById('logbookCount');
-      if (countEl) {
-        countEl.textContent = `${logEntries.length} entries`;
-      }
+      updateLogCount();
     } else {
       showNotification('Failed to load logs', 'error');
     }
@@ -258,6 +271,99 @@ function updateActionFilter() {
 }
 
 /**
+ * Applies current filters to log entries
+ * @param {Array} entries - All log entries
+ * @returns {Array} Filtered entries
+ */
+function applyFiltersToEntries(entries) {
+  return entries.filter(entry => {
+    // Status filter
+    if (currentFilters.status !== 'ALL' && entry.status !== currentFilters.status) {
+      return false;
+    }
+
+    // Transaction filter
+    if (currentFilters.transaction !== 'ALL') {
+      const transactionType = getTransactionType(entry);
+      if (transactionType !== currentFilters.transaction) {
+        return false;
+      }
+    }
+
+    // Time range filter
+    if (currentFilters.timeRange !== 'all') {
+      const entryDate = new Date(entry.timestamp);
+      const now = new Date();
+      let cutoffDate;
+
+      switch (currentFilters.timeRange) {
+        case 'today':
+          cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          break;
+        case 'yesterday':
+          cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          break;
+        case '48h':
+          cutoffDate = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+          break;
+        case '7days':
+          cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+          break;
+        case 'lastweek':
+          const lastWeekStart = new Date(now);
+          lastWeekStart.setDate(now.getDate() - now.getDay() - 7);
+          lastWeekStart.setHours(0, 0, 0, 0);
+          cutoffDate = lastWeekStart;
+          break;
+        case '30days':
+          cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          break;
+        case 'lastmonth':
+          cutoffDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          break;
+        default:
+          cutoffDate = null;
+      }
+
+      if (cutoffDate && entryDate < cutoffDate) {
+        return false;
+      }
+    }
+
+    // Action filter
+    if (currentFilters.action !== 'ALL') {
+      if (currentFilters.action.startsWith('CATEGORY:')) {
+        const category = currentFilters.action.substring(9);
+        if (entry.category !== category) {
+          return false;
+        }
+      } else if (currentFilters.action.startsWith('SOURCE:')) {
+        const source = currentFilters.action.substring(7);
+        if (entry.source !== source) {
+          return false;
+        }
+      } else if (currentFilters.action.startsWith('ACTION:')) {
+        const action = currentFilters.action.substring(7);
+        if (entry.autopilot !== action) {
+          return false;
+        }
+      }
+    }
+
+    // Search filter
+    if (currentFilters.search) {
+      const searchLower = currentFilters.search.toLowerCase();
+      const searchableText = `${entry.autopilot} ${entry.summary} ${JSON.stringify(entry.details)}`.toLowerCase();
+      if (!searchableText.includes(searchLower)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+/**
  * Determines transaction type from entry summary
  * @param {Object} entry - Log entry
  * @returns {string} - 'income', 'expense', or ''
@@ -316,7 +422,7 @@ function getTransactionType(entry) {
 }
 
 /**
- * Renders the log table with current entries
+ * Renders the log table with current entries (using lazy loading)
  */
 function renderLogTable() {
   const tbody = document.getElementById('logbookTableBody');
@@ -336,43 +442,119 @@ function renderLogTable() {
     return;
   }
 
-  tbody.innerHTML = logEntries.map(entry => {
-    const isExpanded = expandedEntries.has(entry.id);
-    let statusIcon, statusClass;
-    if (entry.status === 'SUCCESS') {
-      statusIcon = '✅';
-      statusClass = 'logbook-success';
-    } else if (entry.status === 'WARNING') {
-      statusIcon = '⚠️';
-      statusClass = 'logbook-warning';
-    } else {
-      statusIcon = '❌';
-      statusClass = 'logbook-error';
+  // Apply filters to get filtered entries
+  filteredLogEntries = applyFiltersToEntries(logEntries);
+
+  // Reset display counter
+  displayedEntryCount = 0;
+
+  // Clear table
+  tbody.innerHTML = '';
+
+  // Render first page (10 entries)
+  renderLogPage();
+
+  // Setup infinite scroll (only once)
+  setupInfiniteScroll();
+
+  // Setup event listeners for expand/collapse
+  setupEventListeners();
+}
+
+/**
+ * Renders a page of log entries (LOGBOOK_PAGE_SIZE at a time)
+ * Appends entries to tbody without replacing existing ones
+ */
+function renderLogPage() {
+  const tbody = document.getElementById('logbookTableBody');
+  if (!tbody) return;
+
+  // Get next page of entries
+  const nextEntries = filteredLogEntries.slice(displayedEntryCount, displayedEntryCount + LOGBOOK_PAGE_SIZE);
+
+  if (nextEntries.length === 0) return;
+
+  // Append each entry to tbody
+  nextEntries.forEach(entry => {
+    tbody.innerHTML += createLogEntryHTML(entry);
+  });
+
+  displayedEntryCount += nextEntries.length;
+}
+
+/**
+ * Creates HTML for a single log entry (main row + details row)
+ * @param {Object} entry - Log entry
+ * @returns {string} HTML string for entry
+ */
+function createLogEntryHTML(entry) {
+  const isExpanded = expandedEntries.has(entry.id);
+  let statusIcon, statusClass;
+  if (entry.status === 'SUCCESS') {
+    statusIcon = '✅';
+    statusClass = 'logbook-success';
+  } else if (entry.status === 'WARNING') {
+    statusIcon = '⚠️';
+    statusClass = 'logbook-warning';
+  } else {
+    statusIcon = '❌';
+    statusClass = 'logbook-error';
+  }
+  const date = new Date(entry.timestamp);
+
+  // Determine transaction type for styling
+  const transactionType = getTransactionType(entry);
+  const transactionClass = transactionType ? `logbook-${transactionType}` : '';
+
+  // Always render details row (hidden by default) for instant expand/collapse
+  return `
+    <tr class="logbook-row ${isExpanded ? 'expanded' : ''} ${transactionClass}" data-id="${entry.id}">
+      <td class="logbook-status ${statusClass}">${statusIcon}</td>
+      <td class="logbook-timestamp">${formatTimestamp(date)}</td>
+      <td class="logbook-autopilot">${escapeHtml(entry.autopilot)}</td>
+      <td class="logbook-summary">${escapeHtml(entry.summary)}</td>
+    </tr>
+    <tr class="logbook-details-row ${isExpanded ? '' : 'hidden'}" data-details-for="${entry.id}">
+      <td colspan="4">
+        <div class="logbook-details">
+          <h4>Details</h4>
+          ${formatDetails(entry.details)}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+/**
+ * Sets up infinite scroll listener on logbook container
+ * Only sets up once to avoid duplicate listeners
+ */
+let infiniteScrollSetup = false;
+function setupInfiniteScroll() {
+  if (infiniteScrollSetup) return;
+
+  const container = document.querySelector('.logbook-table-container');
+  if (!container) return;
+
+  container.addEventListener('scroll', () => {
+    // Check if user scrolled near bottom (within 100px)
+    const scrolledToBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+    if (scrolledToBottom && displayedEntryCount < filteredLogEntries.length) {
+      console.log(`[Logbook] Loading more entries... (${displayedEntryCount}/${filteredLogEntries.length})`);
+      renderLogPage();
     }
-    const date = new Date(entry.timestamp);
+  });
 
-    // Determine transaction type for styling
-    const transactionType = getTransactionType(entry);
-    const transactionClass = transactionType ? `logbook-${transactionType}` : '';
+  infiniteScrollSetup = true;
+}
 
-    // Always render details row (hidden by default) for instant expand/collapse
-    return `
-      <tr class="logbook-row ${isExpanded ? 'expanded' : ''} ${transactionClass}" data-id="${entry.id}">
-        <td class="logbook-status ${statusClass}">${statusIcon}</td>
-        <td class="logbook-timestamp">${formatTimestamp(date)}</td>
-        <td class="logbook-autopilot">${escapeHtml(entry.autopilot)}</td>
-        <td class="logbook-summary">${escapeHtml(entry.summary)}</td>
-      </tr>
-      <tr class="logbook-details-row ${isExpanded ? '' : 'hidden'}" data-details-for="${entry.id}">
-        <td colspan="4">
-          <div class="logbook-details">
-            <h4>Details</h4>
-            ${formatDetails(entry.details)}
-          </div>
-        </td>
-      </tr>
-    `;
-  }).join('');
+/**
+ * Sets up event listeners for expand/collapse functionality
+ */
+function setupEventListeners() {
+  const tbody = document.getElementById('logbookTableBody');
+  if (!tbody) return;
 
   // Event delegation: single listener on tbody for better performance
   // Remove old listeners first to avoid duplicates on re-render
@@ -527,26 +709,45 @@ async function exportLogs(format) {
 
 /**
  * Prepends a new log entry to the table (called via WebSocket)
- * Uses smart loading to preserve user's scroll position
+ * Optimized: Only adds the single new entry DOM element, no full re-render
  */
 export function prependLogEntry(entry) {
-  // Store current scroll position
   const tbody = document.getElementById('logbookTableBody');
-  const container = tbody ? tbody.closest('.logbook-table-container') : null;
-  const scrollTop = container ? container.scrollTop : 0;
+  if (!tbody) return;
 
-  // Add entry to array
+  // Add entry to full array
   logEntries.unshift(entry);
 
-  // Re-render table
-  renderLogTable();
+  // Check if entry matches current filters
+  const matchesFilters = applyFiltersToEntries([entry]).length > 0;
 
-  // Restore scroll position (smart auto-prepend)
-  if (container && scrollTop > 0) {
-    container.scrollTop = scrollTop;
+  if (matchesFilters) {
+    // Add to filtered array
+    filteredLogEntries.unshift(entry);
+
+    // Create HTML for this entry only
+    const entryHTML = createLogEntryHTML(entry);
+
+    // Create temporary container to parse HTML
+    const temp = document.createElement('tbody');
+    temp.innerHTML = entryHTML;
+
+    // Prepend all child nodes (main row + details row) to tbody
+    while (temp.firstChild) {
+      tbody.insertBefore(temp.firstChild, tbody.firstChild);
+    }
+
+    displayedEntryCount++;
   }
 
-  // Update count
+  // Update count display
+  updateLogCount();
+}
+
+/**
+ * Updates the log entry count display
+ */
+function updateLogCount() {
   const countEl = document.getElementById('logbookCount');
   if (countEl) {
     countEl.textContent = `${logEntries.length} entries`;

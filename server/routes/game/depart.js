@@ -23,7 +23,6 @@ const express = require('express');
 const { getUserId } = require('../../utils/api');
 const autopilot = require('../../autopilot');
 const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../../utils/audit-logger');
-const { saveHarborFee } = require('../../utils/harbor-fee-store');
 const logger = require('../../utils/logger');
 const { broadcastToUser } = require('../../websocket');
 
@@ -77,24 +76,28 @@ router.post('/depart', async (req, res) => {
     // Call universal depart function
     // vesselIds = null means "depart all"
     // vesselIds = [1,2,3] means "depart these specific vessels"
+    // NOTE: Contribution tracking happens inside autopilot.departVessels()
     const { broadcastHarborMapRefresh } = require('../../websocket');
     // (using broadcastToUser imported at top of file)
     const result = await autopilot.departVessels(userId, vesselIds, broadcastToUser, autopilot.autoRebuyAll, autopilot.tryUpdateAllData);
 
     // LOGBOOK: Manual vessel departure (same format as Auto-Depart)
+    // NOTE: Contribution data comes from individual vessels in departedVessels array
     if (result && result.success && result.departedCount > 0) {
       // Log success
       await auditLog(
         userId,
         CATEGORIES.VESSEL,
         'Manual Depart',
-        `${result.departedCount} vessels | +${formatCurrency(result.totalRevenue)}`,
+        `${result.departedCount} vessels | +${formatCurrency(result.totalRevenue)}${result.contributionGained !== null ? ` | +${result.contributionGained} contribution` : ''}`,
         {
           vesselCount: result.departedCount,
           totalRevenue: result.totalRevenue,
           totalFuelUsed: result.totalFuelUsed,
           totalCO2Used: result.totalCO2Used,
           totalHarborFees: result.totalHarborFees,
+          contributionGained: result.contributionGained,
+          contributionPerVessel: result.contributionPerVessel,
           departedVessels: result.departedVessels
         },
         'SUCCESS',
@@ -119,15 +122,7 @@ router.post('/depart', async (req, res) => {
         );
       }
 
-      // Save harbor fees for vessel history display
-      const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
-      for (const vessel of result.departedVessels) {
-        try {
-          await saveHarborFee(userId, vessel.vesselId, timestamp, vessel.harborFee);
-        } catch (error) {
-          logger.error(`[Depart API] Failed to save harbor fee for vessel ${vessel.vesselId}:`, error.message);
-        }
-      }
+      // NOTE: Harbor fees and contribution gains are already saved in autopilot.departVessels()
     }
 
     // Trigger Harbor Map refresh (vessels departed)

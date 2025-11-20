@@ -14,29 +14,11 @@
  *
  * @requires ../utils/api - API helper functions
  * @requires ../utils/logger - Logging utility
- * @requires ../state - Global state management
- * @requires path - Path utilities
- * @requires fs - File system operations
  * @module server/gameapi/bunker
  */
 
 const { apiCall, getUserId } = require('../utils/api');
 const logger = require('../utils/logger');
-const path = require('path');
-const fs = require('fs');
-
-// Helper function to get app data directory
-function getAppDataDir() {
-  const os = require('os');
-  switch (process.platform) {
-    case 'win32':
-      return process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-    case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Application Support');
-    default:
-      return process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
-  }
-}
 
 
 /**

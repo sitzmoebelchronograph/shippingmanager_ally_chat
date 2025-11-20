@@ -9,28 +9,11 @@
  *
  * @requires ../utils/api - API helper functions
  * @requires ../utils/logger - Logging utility
- * @requires path - Path utilities
- * @requires fs - File system operations
  * @module server/gameapi/vessel
  */
 
 const { apiCall } = require('../utils/api');
 const logger = require('../utils/logger');
-const path = require('path');
-const fs = require('fs');
-
-// Helper function to get app data directory
-function getAppDataDir() {
-  const os = require('os');
-  switch (process.platform) {
-    case 'win32':
-      return process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
-    case 'darwin':
-      return path.join(os.homedir(), 'Library', 'Application Support');
-    default:
-      return process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
-  }
-}
 
 
 /**
@@ -127,11 +110,18 @@ async function departVessel(vesselId, speed, guards = 0) {
   logger.debug(`[Depart API Response] Vessel: ${vesselData?.name} (ID: ${vesselId})`);
   logger.debug(`[Depart API Response] depart_info: ${JSON.stringify(departInfo, null, 2)}`);
 
+  // Extract vessel history (first entry) for additional route details
+  const vesselHistory = data.data.vessel_history?.[0];
+
   return {
     success: true,
     vesselId: vesselId,
     vesselName: vesselData?.name,
-    destination: vesselData?.route_destination,
+    origin: vesselData?.route_origin || vesselHistory?.route_origin,
+    destination: vesselData?.route_destination || vesselHistory?.route_destination,
+    distance: vesselData?.route_distance || vesselHistory?.total_distance,
+    duration: vesselHistory?.duration,
+    routeName: vesselData?.route_name || vesselHistory?.route_name,
     income: income,
     harborFee: departInfo.harbor_fee,
     netIncome: income, // depart_income is already NET (after fees)

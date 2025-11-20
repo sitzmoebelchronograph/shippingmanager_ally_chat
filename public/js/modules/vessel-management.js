@@ -1526,21 +1526,21 @@ function loadMorePendingVessels() {
       additionalAttrs += `<div class="vessel-spec"><strong>Points Price:</strong> ${formatNumber(vessel.price_in_points)}</div>`;
     }
     if (vessel.perks && vessel.perks !== null) {
-      additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${vessel.perks}</div>`;
+      additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${escapeHtml(vessel.perks)}</div>`;
     }
 
     const card = document.createElement('div');
     card.className = 'vessel-card pending-vessel';
     card.innerHTML = `
       <div class="vessel-image-container">
-        <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
+        <img src="${imageUrl}" alt="${escapeHtml(vessel.name)}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
         ${vessel.only_for_credits ? '<div class="vessel-credits-only-badge">$</div>' : ''}
         <div class="vessel-time-badge">⏱️ ${timeDisplay}</div>
         <div class="vessel-price-badge">$${formatNumber(vessel.price || 0)}</div>
       </div>
       <div class="vessel-content">
         <div class="vessel-header">
-          <h3 class="vessel-name">${vessel.name}</h3>
+          <h3 class="vessel-name">${escapeHtml(vessel.name)}</h3>
         </div>
         <div class="vessel-specs">
           <div class="vessel-spec"><strong>Capacity:</strong> ${capacityDisplay}</div>
@@ -1549,17 +1549,17 @@ function loadMorePendingVessels() {
           <div class="vessel-spec ${fuelClass}"><strong>Fuel Factor:</strong> ${vessel.fuel_factor}</div>
           <div class="vessel-spec"><strong>Fuel Cap.:</strong> ${formatNumber(vessel.fuel_capacity || 0)} t</div>
           <div class="vessel-spec"><strong>Service:</strong> ${vessel.hours_between_service || 0}h</div>
-          <div class="vessel-spec"><strong>Engine:</strong> ${vessel.engine_type || 'N/A'} (${formatNumber(vessel.kw || 0)} kW)</div>
+          <div class="vessel-spec"><strong>Engine:</strong> ${escapeHtml(vessel.engine_type || 'N/A')} (${formatNumber(vessel.kw || 0)} kW)</div>
           <div class="vessel-spec"><strong>Speed:</strong> ${vessel.max_speed || 0} kn</div>
-          <div class="vessel-spec"><strong>Type:</strong> ${vessel.type_name || vessel.type}</div>
-          <div class="vessel-spec"><strong>Port:</strong> ${(vessel.current_port_code || '').replace(/_/g, ' ')}</div>
-          <div class="vessel-spec"><strong>Year:</strong> ${vessel.year || 'N/A'}</div>
+          <div class="vessel-spec"><strong>Type:</strong> ${escapeHtml(vessel.type_name || vessel.type)}</div>
+          <div class="vessel-spec"><strong>Port:</strong> ${escapeHtml((vessel.current_port_code || '').replace(/_/g, ' '))}</div>
+          <div class="vessel-spec"><strong>Year:</strong> ${escapeHtml(String(vessel.year || 'N/A'))}</div>
           <div class="vessel-spec"><strong>Length:</strong> ${vessel.length || 0} m</div>
-          <div class="vessel-spec"><strong>IMO:</strong> ${vessel.imo || 'N/A'}</div>
-          <div class="vessel-spec"><strong>MMSI:</strong> ${vessel.mmsi || 'N/A'}</div>
+          <div class="vessel-spec"><strong>IMO:</strong> ${escapeHtml(String(vessel.imo || 'N/A'))}</div>
+          <div class="vessel-spec"><strong>MMSI:</strong> ${escapeHtml(String(vessel.mmsi || 'N/A'))}</div>
           ${vessel.gearless || vessel.antifouling || additionalAttrs ? '<div class="vessel-spec-divider"></div>' : ''}
           ${vessel.gearless ? '<div class="vessel-spec vessel-spec-fullwidth vessel-spec-gearless"><strong>⚙️ Gearless:</strong> own cranes</div>' : ''}
-          ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${vessel.antifouling}</div>` : ''}
+          ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${escapeHtml(vessel.antifouling)}</div>` : ''}
           ${additionalAttrs}
         </div>
       </div>
@@ -1591,7 +1591,7 @@ export function displayVessels() {
 
   if (filtered.length === 0) {
     const filterText = selectedEngineType
-      ? `No vessels with engine type "${selectedEngineType}"`
+      ? `No vessels with engine type "${escapeHtml(selectedEngineType)}"`
       : `No ${currentVesselFilter} vessels available`;
     feed.innerHTML = `
       <div style="text-align: center; color: #9ca3af; padding: 40px;">
@@ -1627,19 +1627,19 @@ export function displayVessels() {
       additionalAttrs += `<div class="vessel-spec"><strong>Points Price:</strong> ${formatNumber(vessel.price_in_points)}</div>`;
     }
     if (vessel.perks && vessel.perks !== null) {
-      additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${vessel.perks}</div>`;
+      additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${escapeHtml(vessel.perks)}</div>`;
     }
 
     const card = document.createElement('div');
     card.className = 'vessel-card';
     card.innerHTML = `
       <div class="vessel-image-container">
-        <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
+        <img src="${imageUrl}" alt="${escapeHtml(vessel.name)}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
         ${vessel.only_for_credits ? '<div class="vessel-credits-overlay">$</div>' : ''}
       </div>
       <div class="vessel-content">
         <div class="vessel-header">
-          <h3 class="vessel-name">${vessel.name}</h3>
+          <h3 class="vessel-name">${escapeHtml(vessel.name)}</h3>
           <div class="vessel-price">$${formatNumber(vessel.price)}</div>
         </div>
         <div class="vessel-specs">
@@ -1649,17 +1649,17 @@ export function displayVessels() {
           <div class="vessel-spec ${fuelClass}"><strong>Fuel Factor:</strong> ${vessel.fuel_factor}</div>
           <div class="vessel-spec"><strong>Fuel Cap.:</strong> ${formatNumber(vessel.fuel_capacity)} t</div>
           <div class="vessel-spec"><strong>Service:</strong> ${vessel.hours_between_service}h</div>
-          <div class="vessel-spec"><strong>Engine:</strong> ${vessel.engine_type} (${formatNumber(vessel.kw)} kW)</div>
+          <div class="vessel-spec"><strong>Engine:</strong> ${escapeHtml(vessel.engine_type)} (${formatNumber(vessel.kw)} kW)</div>
           <div class="vessel-spec"><strong>Speed:</strong> ${vessel.max_speed} kn</div>
-          <div class="vessel-spec"><strong>Type:</strong> ${vessel.type_name}</div>
-          <div class="vessel-spec"><strong>Port:</strong> ${vessel.current_port_code.replace(/_/g, ' ')}</div>
-          <div class="vessel-spec"><strong>Year:</strong> ${vessel.year}</div>
+          <div class="vessel-spec"><strong>Type:</strong> ${escapeHtml(vessel.type_name)}</div>
+          <div class="vessel-spec"><strong>Port:</strong> ${escapeHtml(vessel.current_port_code.replace(/_/g, ' '))}</div>
+          <div class="vessel-spec"><strong>Year:</strong> ${escapeHtml(String(vessel.year))}</div>
           <div class="vessel-spec"><strong>Length:</strong> ${vessel.length} m</div>
-          <div class="vessel-spec"><strong>IMO:</strong> ${vessel.imo || 'N/A'}</div>
-          <div class="vessel-spec"><strong>MMSI:</strong> ${vessel.mmsi || 'N/A'}</div>
+          <div class="vessel-spec"><strong>IMO:</strong> ${escapeHtml(String(vessel.imo || 'N/A'))}</div>
+          <div class="vessel-spec"><strong>MMSI:</strong> ${escapeHtml(String(vessel.mmsi || 'N/A'))}</div>
           ${vessel.gearless || vessel.antifouling || additionalAttrs ? '<div class="vessel-spec vessel-spec-divider"></div>' : ''}
           ${vessel.gearless ? '<div class="vessel-spec vessel-spec-fullwidth vessel-spec-gearless"><strong>⚙️ Gearless:</strong> own cranes</div>' : ''}
-          ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${vessel.antifouling}</div>` : ''}
+          ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${escapeHtml(vessel.antifouling)}</div>` : ''}
           ${additionalAttrs}
         </div>
         <div class="vessel-actions">
@@ -1717,8 +1717,8 @@ export function showEngineFilterOverlay() {
     const isLastAndOdd = (index === engineTypes.length - 1) && (engineTypes.length % 2 !== 0);
 
     html += `
-      <div class="chat-selection-item engine-filter-item${isSelected ? ' selected' : ''}" data-engine="${engineType}" style="cursor: pointer; padding: 15px; border: 1px solid ${isSelected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(255, 255, 255, 0.1)'}; border-radius: 8px; transition: all 0.2s;${isLastAndOdd ? ' grid-column: 1 / -1; max-width: 50%; margin: 0 auto;' : ''}">
-        <div style="font-weight: 600; color: #e0e0e0;">⚙️ ${engineType}</div>
+      <div class="chat-selection-item engine-filter-item${isSelected ? ' selected' : ''}" data-engine="${escapeHtml(engineType)}" style="cursor: pointer; padding: 15px; border: 1px solid ${isSelected ? 'rgba(16, 185, 129, 0.4)' : 'rgba(255, 255, 255, 0.1)'}; border-radius: 8px; transition: all 0.2s;${isLastAndOdd ? ' grid-column: 1 / -1; max-width: 50%; margin: 0 auto;' : ''}">
+        <div style="font-weight: 600; color: #e0e0e0;">⚙️ ${escapeHtml(engineType)}</div>
         <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">${count} vessel${count === 1 ? '' : 's'} available</div>
       </div>
     `;
@@ -2477,7 +2477,7 @@ function populateDynamicFilters() {
   engineTypes.forEach(engineType => {
     const displayName = engineType.toUpperCase().replace(/_/g, ' ');
     // NOT selected by default - user must select manually
-    engineSelect.innerHTML += `<option value="${engineType}">${displayName}</option>`;
+    engineSelect.innerHTML += `<option value="${escapeHtml(engineType)}">${escapeHtml(displayName)}</option>`;
   });
 
   // Max Speed: 5kn steps from min to max speed (NO "kn" in dropdown, it's in title)
@@ -2772,16 +2772,16 @@ function createVesselCard(vessel, isPending = false) {
     additionalAttrs += `<div class="vessel-spec"><strong>Points Price:</strong> ${formatNumber(vessel.price_in_points)}</div>`;
   }
   if (vessel.perks && vessel.perks !== null) {
-    additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${vessel.perks}</div>`;
+    additionalAttrs += `<div class="vessel-spec vessel-spec-fullwidth"><strong>Perks:</strong> ${escapeHtml(vessel.perks)}</div>`;
   }
 
   const card = document.createElement('div');
   card.className = isPending ? 'vessel-card pending-vessel' : 'vessel-card';
   card.innerHTML = `
     <div class="vessel-image-container">
-      <img src="${imageUrl}" alt="${vessel.name}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
+      <img src="${imageUrl}" alt="${escapeHtml(vessel.name)}" class="vessel-image" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 300%22><rect fill=%22%23374151%22 width=%22400%22 height=%22300%22/><text x=%2250%%22 y=%2250%%22 fill=%22%239ca3af%22 text-anchor=%22middle%22 font-size=%2224%22>⛴️</text></svg>'">
       ${vessel.only_for_credits ? '<div class="vessel-credits-overlay">$</div>' : ''}
-      ${isVesselTypeLocked ? '<div class="vessel-locked-overlay"><div class="vessel-locked-banner">🔒 Locked</div><div class="vessel-locked-text">Unlock ' + vessel.capacity_type + ' vessels first</div></div>' : ''}
+      ${isVesselTypeLocked ? '<div class="vessel-locked-overlay"><div class="vessel-locked-banner">🔒 Locked</div><div class="vessel-locked-text">Unlock ' + escapeHtml(vessel.capacity_type) + ' vessels first</div></div>' : ''}
       ${isPending ? `<div class="vessel-time-badge">⏱️ In Delivery ${(() => {
         const remaining = vessel.time_arrival || 0;
         if (remaining > 0) {
@@ -2798,7 +2798,7 @@ function createVesselCard(vessel, isPending = false) {
     </div>
     <div class="vessel-content">
       <div class="vessel-header">
-        <h3 class="vessel-name">${vessel.name}</h3>
+        <h3 class="vessel-name">${escapeHtml(vessel.name)}</h3>
         <div class="vessel-price">$${formatNumber(vessel.price)}</div>
       </div>
       <div class="vessel-specs">
@@ -2808,17 +2808,17 @@ function createVesselCard(vessel, isPending = false) {
         <div class="vessel-spec ${fuelClass}"><strong>Fuel Factor:</strong> ${vessel.fuel_factor}</div>
         <div class="vessel-spec"><strong>Fuel Cap.:</strong> ${formatNumber(vessel.fuel_capacity)} t</div>
         <div class="vessel-spec"><strong>Service:</strong> ${vessel.hours_between_service}h</div>
-        <div class="vessel-spec"><strong>Engine:</strong> ${vessel.engine_type} (${formatNumber(vessel.kw)} kW)</div>
+        <div class="vessel-spec"><strong>Engine:</strong> ${escapeHtml(vessel.engine_type)} (${formatNumber(vessel.kw)} kW)</div>
         <div class="vessel-spec"><strong>Speed:</strong> ${vessel.max_speed} kn</div>
-        <div class="vessel-spec"><strong>Type:</strong> ${vessel.type_name}</div>
-        <div class="vessel-spec"><strong>Port:</strong> ${vessel.current_port_code.replace(/_/g, ' ')}</div>
-        <div class="vessel-spec"><strong>Year:</strong> ${vessel.year}</div>
+        <div class="vessel-spec"><strong>Type:</strong> ${escapeHtml(vessel.type_name)}</div>
+        <div class="vessel-spec"><strong>Port:</strong> ${escapeHtml(vessel.current_port_code.replace(/_/g, ' '))}</div>
+        <div class="vessel-spec"><strong>Year:</strong> ${escapeHtml(String(vessel.year))}</div>
         <div class="vessel-spec"><strong>Length:</strong> ${vessel.length} m</div>
-        <div class="vessel-spec"><strong>IMO:</strong> ${vessel.imo || 'N/A'}</div>
-        <div class="vessel-spec"><strong>MMSI:</strong> ${vessel.mmsi || 'N/A'}</div>
+        <div class="vessel-spec"><strong>IMO:</strong> ${escapeHtml(String(vessel.imo || 'N/A'))}</div>
+        <div class="vessel-spec"><strong>MMSI:</strong> ${escapeHtml(String(vessel.mmsi || 'N/A'))}</div>
         ${vessel.gearless || vessel.antifouling || additionalAttrs ? '<div class="vessel-spec vessel-spec-divider"></div>' : ''}
         ${vessel.gearless ? '<div class="vessel-spec vessel-spec-fullwidth vessel-spec-gearless"><strong>⚙️ Gearless:</strong> own cranes</div>' : ''}
-        ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${vessel.antifouling}</div>` : ''}
+        ${vessel.antifouling ? `<div class="vessel-spec vessel-spec-fullwidth vessel-spec-antifouling"><strong>🛡️ Antifouling:</strong> ${escapeHtml(vessel.antifouling)}</div>` : ''}
         ${additionalAttrs}
       </div>
       ${!isPending ? `

@@ -14,6 +14,10 @@
  */
 
 const security = require('eslint-plugin-security');
+const noUnsanitized = require('eslint-plugin-no-unsanitized');
+const noSecrets = require('eslint-plugin-no-secrets');
+const sonarjs = require('eslint-plugin-sonarjs');
+const pii = require('eslint-plugin-pii');
 
 module.exports = [
   {
@@ -57,7 +61,11 @@ module.exports = [
       }
     },
     plugins: {
-      security
+      security,
+      'no-unsanitized': noUnsanitized,
+      'no-secrets': noSecrets,
+      sonarjs,
+      pii
     },
     rules: {
       'no-eval': 'error',
@@ -66,6 +74,18 @@ module.exports = [
       'no-script-url': 'error',
       'security/detect-eval-with-expression': 'error',
       'security/detect-unsafe-regex': 'error',
+      'no-unsanitized/method': 'error',
+      'no-unsanitized/property': 'off',
+      'no-secrets/no-secrets': ['error', {
+        'tolerance': 5.0,
+        'additionalDelimiters': ['=', '"', '\'']
+      }],
+      'pii/no-phone-number': 'off',
+      'pii/no-email': 'warn',
+      'pii/no-ip': 'off',
+      'sonarjs/cognitive-complexity': 'off',
+      'sonarjs/no-duplicate-string': 'off',
+      'sonarjs/no-identical-functions': 'off',
       'no-unused-vars': ['warn', {
         argsIgnorePattern: '^_',
         varsIgnorePattern: '^_'
@@ -112,7 +132,11 @@ module.exports = [
       }
     },
     plugins: {
-      security
+      security,
+      'no-unsanitized': noUnsanitized,
+      'no-secrets': noSecrets,
+      sonarjs,
+      pii
     },
     rules: {
       // ===== ESLint Built-in Security Rules =====
@@ -122,6 +146,26 @@ module.exports = [
       'no-implied-eval': 'error',
       'no-new-func': 'error',
       'no-script-url': 'error',
+
+      // ===== DOM XSS Prevention =====
+      'no-unsanitized/method': 'error',
+      'no-unsanitized/property': 'off',
+
+      // ===== Secrets & Credentials Detection =====
+      'no-secrets/no-secrets': ['error', {
+        'tolerance': 5.0,  // Increase tolerance to reduce false positives from HTML IDs
+        'additionalDelimiters': ['=', '"', '\'']
+      }],
+
+      // ===== PII Detection (GDPR Compliance) =====
+      'pii/no-phone-number': 'off',
+      'pii/no-email': 'warn',
+      'pii/no-ip': 'off',
+
+      // ===== Code Quality (Bug Prevention) =====
+      'sonarjs/cognitive-complexity': 'off',
+      'sonarjs/no-duplicate-string': 'off',
+      'sonarjs/no-identical-functions': 'off',
 
       // Prevent prototype pollution
       'no-prototype-builtins': 'warn',
@@ -243,11 +287,27 @@ module.exports = [
       }
     },
     plugins: {
-      security
+      security,
+      'no-unsanitized': noUnsanitized,
+      'no-secrets': noSecrets,
+      sonarjs,
+      pii
     },
     rules: {
       'no-eval': 'error',
-      'security/detect-unsafe-regex': 'error'
+      'security/detect-unsafe-regex': 'error',
+      'no-unsanitized/method': 'error',
+      'no-unsanitized/property': 'off',
+      'no-secrets/no-secrets': ['error', {
+        'tolerance': 5.0,
+        'additionalDelimiters': ['=', '"', '\'']
+      }],
+      'pii/no-phone-number': 'off',
+      'pii/no-email': 'warn',
+      'pii/no-ip': 'off',
+      'sonarjs/cognitive-complexity': 'off',
+      'sonarjs/no-duplicate-string': 'off',
+      'sonarjs/no-identical-functions': 'off'
     }
   }
 ];

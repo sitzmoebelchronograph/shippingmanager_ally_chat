@@ -13,6 +13,41 @@ const logger = require('../utils/logger');
 const { getUserId } = require('../utils/api');
 const { auditLog, CATEGORIES, SOURCES, formatCurrency } = require('../utils/audit-logger');
 const { saveHarborFee } = require('../utils/harbor-fee-store');
+const { saveContributionGain } = require('../utils/contribution-store');
+const { fetchUserContribution } = require('../gameapi/alliance');
+
+/**
+ * Tracks vessels that failed fuel check to avoid retrying unnecessarily.
+ * Map structure: { userId: { vesselId: { fuelLevel: number, requiredFuel: number, timestamp: number } } }
+ *
+ * This cache is cleared when fuel level increases, ensuring we retry vessels
+ * that previously failed once more fuel is available.
+ */
+const fuelFailedVesselsCache = new Map();
+
+/**
+ * Resets the fuel-failed vessels cache for a specific user when fuel increases.
+ * This allows vessels that previously couldn't depart to be retried.
+ *
+ * @param {number} userId - User ID
+ * @param {number} newFuelLevel - New fuel level in tons
+ */
+function resetFuelFailedCacheIfIncreased(userId, newFuelLevel) {
+  const userCache = fuelFailedVesselsCache.get(userId);
+  if (!userCache) return;
+
+  // Get the previous fuel level from the first cached vessel (all share same fuel level snapshot)
+  const cachedEntries = Array.from(userCache.values());
+  if (cachedEntries.length === 0) return;
+
+  const previousFuelLevel = cachedEntries[0].fuelLevel;
+
+  // If fuel increased, clear the cache so we can retry all vessels
+  if (newFuelLevel > previousFuelLevel) {
+    logger.debug(`[Depart] Fuel increased from ${previousFuelLevel.toFixed(1)}t to ${newFuelLevel.toFixed(1)}t - resetting fuel-failed vessel cache`);
+    fuelFailedVesselsCache.delete(userId);
+  }
+}
 
 /**
  * Calculates remaining demand at a port.
@@ -95,6 +130,20 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
     // Get current bunker state
     const bunker = await gameapi.fetchBunkerState();
     state.updateBunkerState(userId, bunker);
+
+    // Reset fuel-failed vessels cache if fuel increased
+    resetFuelFailedCacheIfIncreased(userId, bunker.fuel);
+
+    // DEBUG: Log fuel-failed cache status
+    const userCache = fuelFailedVesselsCache.get(userId);
+    if (userCache && userCache.size > 0) {
+      logger.debug(`[Depart] Fuel-failed cache: ${userCache.size} vessel(s) previously failed fuel check`);
+      for (const [vesselId, data] of userCache.entries()) {
+        logger.debug(`[Depart]   - Vessel ID ${vesselId}: need ${data.requiredFuel.toFixed(1)}t, had ${data.fuelLevel.toFixed(1)}t`);
+      }
+    } else {
+      logger.debug(`[Depart] Fuel-failed cache: empty`);
+    }
 
     // Check if fuel is too low (use minFuelThreshold setting)
     if (bunker.fuel < settings.minFuelThreshold) {
@@ -290,6 +339,20 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
       for (const vessel of sortedVessels) {
         const vesselCapacity = getTotalCapacity(vessel);
 
+        // OPTIMIZATION: Skip vessels that previously failed fuel check (unless fuel increased)
+        const vesselCache = fuelFailedVesselsCache.get(userId) || new Map();
+        const cachedFailure = vesselCache.get(vessel.id);
+
+        if (cachedFailure) {
+          logger.debug(`[Depart] ${vessel.name}: Skipping - already checked with insufficient fuel (need ${cachedFailure.requiredFuel.toFixed(1)}t, had ${cachedFailure.fuelLevel.toFixed(1)}t)`);
+          failedVessels.push({
+            name: vessel.name,
+            destination: destination,
+            reason: `Insufficient fuel: need ${cachedFailure.requiredFuel.toFixed(1)}t, have ${bunker.fuel.toFixed(1)}t (cached)`
+          });
+          continue;
+        }
+
         // Use cached port data (assigned ports don't change during depart process)
         const port = assignedPorts.find(p => p.code === destination);
 
@@ -380,8 +443,64 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
           guards = vessel.route_guards;
         }
 
+        // PRE-CHECK: Calculate and verify sufficient fuel BEFORE attempting departure
+        // Fuel calculation based on: distance (nm), speed (kn), and fuel_factor
+        // Formula derived from API response analysis:
+        // fuel_usage (kg) = (route_distance / route_speed) * fuel_factor * base_consumption
+        // Base consumption appears to be ~5.37 kg/h for standard vessels
+
+        let requiredFuel = vessel.route_fuel_required || vessel.fuel_required;
+
+        // If not provided by API, calculate it ourselves
+        if (!requiredFuel && vessel.route_distance && vessel.fuel_factor) {
+          const distance = vessel.route_distance; // nautical miles
+          const fuelFactor = vessel.fuel_factor;
+          // Use actual speed (might be reduced from max_speed by settings)
+          const actualSpeed = speed || vessel.route_speed || vessel.max_speed;
+
+          // Base fuel consumption rate (kg/hour) - derived from API data analysis
+          // This is an approximation based on typical vessel consumption
+          const baseFuelRate = 5.37; // kg/hour
+
+          // Calculate travel time in hours
+          const travelTimeHours = distance / actualSpeed;
+
+          // Calculate fuel in kg, then convert to tons
+          const fuelKg = travelTimeHours * fuelFactor * baseFuelRate;
+          requiredFuel = fuelKg / 1000; // Convert kg to tons
+
+          logger.debug(`[Depart] ${vessel.name}: Calculated fuel requirement - ${requiredFuel.toFixed(1)}t (${distance}nm @ ${actualSpeed}kn, factor=${fuelFactor})`);
+        }
+
+        const currentFuel = bunker.fuel;
+
+        if (requiredFuel && currentFuel < requiredFuel) {
+          logger.debug(`[Depart] ${vessel.name}: Insufficient fuel - need ${requiredFuel.toFixed(1)}t, have ${currentFuel.toFixed(1)}t`);
+
+          // Cache this vessel as fuel-failed to avoid retrying until fuel increases
+          if (!fuelFailedVesselsCache.has(userId)) {
+            fuelFailedVesselsCache.set(userId, new Map());
+          }
+          fuelFailedVesselsCache.get(userId).set(vessel.id, {
+            fuelLevel: currentFuel,
+            requiredFuel: requiredFuel,
+            timestamp: Date.now()
+          });
+
+          failedVessels.push({
+            name: vessel.name,
+            destination: destination,
+            reason: `Insufficient fuel: need ${requiredFuel.toFixed(1)}t, have ${currentFuel.toFixed(1)}t`
+          });
+          continue;
+        }
+
         try {
           logger.debug(`[Depart] Attempting to depart vessel: name="${vessel.name}", id=${vessel.id}, status="${vessel.status}"`);
+
+          // Query contribution BEFORE this vessel departs
+          const contributionBefore = await fetchUserContribution(userId);
+
           const result = await gameapi.departVessel(vessel.id, speed, guards);
 
           // Check if departure failed
@@ -399,21 +518,29 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
               continue;
             }
 
-            logger.warn(`[Depart] Failed to depart ${vessel.name}: "${result.errorMessage}"`);
+            // Extract error message safely (API can return strings, objects, or undefined)
+            let detailedReason = 'Unknown error';
 
-            let detailedReason = result.errorMessage;
-            if (result.apiResponse && result.apiResponse.message) {
+            if (typeof result.errorMessage === 'string') {
+              detailedReason = result.errorMessage;
+            } else if (result.errorMessage && typeof result.errorMessage === 'object') {
+              detailedReason = JSON.stringify(result.errorMessage);
+            }
+
+            if (result.apiResponse && result.apiResponse.message && typeof result.apiResponse.message === 'string') {
               detailedReason = result.apiResponse.message;
             }
+
+            logger.warn(`[Depart] Failed to depart ${vessel.name}: "${detailedReason}"`);
 
             const lowerReason = detailedReason.toLowerCase();
 
             if (lowerReason.includes('fuel') || lowerReason.includes('bunker')) {
-              const requiredFuel = vessel.route_fuel_required || vessel.fuel_required;
+              // Reuse requiredFuel and currentFuel from outer scope (already declared above)
               if (requiredFuel) {
-                detailedReason = `No fuel (${requiredFuel.toFixed(1)}t)`;
+                detailedReason = `Insufficient fuel: need ${requiredFuel.toFixed(1)}t, have ${currentFuel.toFixed(1)}t`;
               } else {
-                detailedReason = 'No fuel';
+                detailedReason = `Insufficient fuel: have ${currentFuel.toFixed(1)}t`;
               }
             } else if (lowerReason.includes('demand') || (remainingDemand <= 0 && lowerReason.includes('failed'))) {
               detailedReason = `No demand at ${destination} (${remainingDemand.toFixed(1)}t remaining demand, vessel capacity ${vesselCapacity.toFixed(1)}t)`;
@@ -447,6 +574,9 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
             continue;
           }
 
+          // Query contribution AFTER successful departure
+          const contributionAfter = await fetchUserContribution(userId);
+
           // Check for negative net income (harbor fees too high)
           const hasFeeCalculationBug = result.netIncome < 0;
 
@@ -473,11 +603,24 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
           const actualCargoLoaded = result.cargoLoaded;
           const actualUtilization = vesselCapacity > 0 ? actualCargoLoaded / vesselCapacity : 0;
 
+          // Calculate contribution gained by this vessel
+          const contributionGained = contributionBefore !== null && contributionAfter !== null
+            ? contributionAfter - contributionBefore
+            : null;
+
+          if (contributionGained !== null) {
+            logger.debug(`[Depart] ${vessel.name} gained ${contributionGained} contribution`);
+          }
+
           // Successfully departed
           const vesselData = {
             vesselId: vessel.id,
             name: result.vesselName,
+            origin: result.origin,
             destination: result.destination,
+            distance: result.distance,
+            duration: result.duration,
+            routeName: result.routeName,
             capacity: vesselCapacity,
             utilization: actualUtilization,  // Use ACTUAL from API
             cargoLoaded: actualCargoLoaded,  // Use ACTUAL from API
@@ -489,6 +632,7 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
             hasFeeCalculationBug: hasFeeCalculationBug,
             fuelUsed: result.fuelUsed,
             co2Used: result.co2Used,
+            contributionGained: contributionGained,  // Individual contribution for this vessel
             // Include detailed cargo breakdown for debugging
             teuDry: result.teuDry,
             teuRefrigerated: result.teuRefrigerated,
@@ -498,10 +642,15 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
           departedVessels.push(vesselData);
           allDepartedVessels.push(vesselData);
 
-          // Save harbor fee for vessel history display
+          // Save harbor fee and contribution for vessel history display
           // Use current timestamp (vessel_history created_at will match this closely)
           const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
           await saveHarborFee(userId, vessel.id, timestamp, result.harborFee);
+
+          // Save contribution gain for this vessel (actual value, not average)
+          if (contributionGained !== null) {
+            await saveContributionGain(userId, vessel.id, timestamp, contributionGained);
+          }
 
         } catch (error) {
           logger.error(`[Depart] Failed to depart ${vessel.name}:`, error.message);
@@ -600,6 +749,29 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
     const totalCO2Used = allDepartedVessels.reduce((sum, v) => sum + (v.co2Used || 0), 0);
     const totalHarborFees = allDepartedVessels.reduce((sum, v) => sum + (v.harborFee || 0), 0);
 
+    // Calculate total contribution gained from individual vessel contributions
+    const totalContributionGained = allDepartedVessels.reduce((sum, v) => sum + (v.contributionGained || 0), 0);
+
+    // Output to console for debugging
+    if (allDepartedVessels.length > 0) {
+      const vesselsWithContribution = allDepartedVessels.filter(v => v.contributionGained !== null);
+      if (vesselsWithContribution.length > 0) {
+        console.log(`\n==================================================`);
+        console.log(`Contribution for last ride: ${allDepartedVessels.length} vessels`);
+        console.log(`Total gained: ${totalContributionGained}`);
+        console.log(`Per vessel breakdown:`);
+        vesselsWithContribution.forEach(v => {
+          console.log(`  - ${v.name}: +${v.contributionGained}`);
+        });
+        console.log(`==================================================\n`);
+      } else {
+        console.log(`\n==================================================`);
+        console.log(`Contribution for last ride: ${allDepartedVessels.length} vessels`);
+        console.log(`NOT TRACKED - User not in alliance`);
+        console.log(`==================================================\n`);
+      }
+    }
+
     return {
       success: true,
       departedCount: allDepartedVessels.length,
@@ -612,7 +784,9 @@ async function departVessels(userId, vesselIds = null, broadcastToUser, autoRebu
       totalRevenue,
       totalFuelUsed,
       totalCO2Used,
-      totalHarborFees
+      totalHarborFees,
+      contributionGained: totalContributionGained > 0 ? totalContributionGained : null,
+      contributionPerVessel: totalContributionGained > 0 && allDepartedVessels.length > 0 ? totalContributionGained / allDepartedVessels.length : null
     };
 
   } catch (error) {
@@ -678,13 +852,15 @@ async function autoDepartVessels(autopilotPaused, broadcastToUser, autoRebuyAll,
         userId,
         CATEGORIES.VESSEL,
         'Auto-Depart',
-        `${result.departedCount} vessels | +${formatCurrency(result.totalRevenue)}`,
+        `${result.departedCount} vessels | +${formatCurrency(result.totalRevenue)}${result.contributionGained !== null ? ` | +${result.contributionGained} contribution` : ''}`,
         {
           vesselCount: result.departedCount,
           totalRevenue: result.totalRevenue,
           totalFuelUsed: result.totalFuelUsed,
           totalCO2Used: result.totalCO2Used,
           totalHarborFees: result.totalHarborFees,
+          contributionGained: result.contributionGained,
+          contributionPerVessel: result.contributionPerVessel,
           departedVessels: result.departedVessels
         },
         'SUCCESS',

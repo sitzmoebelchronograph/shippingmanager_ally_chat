@@ -67,8 +67,7 @@ export function openEventModal() {
 
     if (!overlay || !content) return;
 
-    overlay.classList.remove('d-none');
-    overlay.classList.add('d-flex');
+    overlay.classList.remove('hidden');
 
     // Clear any existing timer
     if (timerInterval) {
@@ -126,51 +125,95 @@ export function openEventModal() {
     // Build HTML - single content area with styled sections
     let html = `
         <div class="event-info-container">
-            <h3 class="event-info-title"><strong>${formatName(currentEventData.name || 'Active Event')}</strong></h3>
+    `;
 
-            <div class="event-info-grid">
+    // Title - only show if name exists
+    if (currentEventData.name) {
+        html += `<h3 class="event-info-title"><strong>${formatName(currentEventData.name)}</strong></h3>`;
+    }
+
+    html += `<div class="event-info-grid">`;
+
+    // Type
+    if (currentEventData.type) {
+        html += `
                 <span class="event-info-label">Type:</span>
-                <span class="event-info-value">${formatName(currentEventData.type || 'N/A')}</span>
+                <span class="event-info-value">${formatName(currentEventData.type)}</span>
+        `;
+    }
 
+    // Discount Type
+    if (currentEventData.discount_type) {
+        html += `
                 <span class="event-info-label">Discount Type:</span>
-                <span class="event-info-value-highlight">${capitalize(currentEventData.discount_type || 'N/A')}</span>
+                <span class="event-info-value-highlight">${capitalize(currentEventData.discount_type)}</span>
+        `;
+    }
 
+    // Discount Amount
+    if (currentEventData.discount_percentage) {
+        html += `
                 <span class="event-info-label">Discount Amount:</span>
-                <span class="event-info-value-highlight">${currentEventData.discount_percentage || 0}%</span>
+                <span class="event-info-value-highlight">${currentEventData.discount_percentage}%</span>
+        `;
+    }
 
+    // Demand Type (capacity_type)
+    if (currentEventData.capacity_type) {
+        html += `
                 <span class="event-info-label">Demand Type:</span>
-                <span class="event-info-value">${capitalize(currentEventData.capacity_type || 'N/A')}</span>
+                <span class="event-info-value">${capitalize(currentEventData.capacity_type)}</span>
+        `;
+    }
 
+    // Daily Demand Multiplier
+    if (currentEventData.daily_demand_multiplier) {
+        html += `
                 <span class="event-info-label">Daily Demand Multiplier:</span>
-                <span class="event-info-value-highlight">${currentEventData.daily_demand_multiplier || 1}x</span>
+                <span class="event-info-value-highlight">${currentEventData.daily_demand_multiplier}x</span>
+        `;
+    }
 
+    // Started
+    html += `
                 <span class="event-info-label">Started:</span>
                 <span class="event-info-value">${startDate}</span>
+    `;
 
+    // Ends
+    html += `
                 <span class="event-info-label">Ends:</span>
                 <span class="event-info-value">${endDate}</span>
+    `;
 
+    // Ends In
+    html += `
                 <span class="event-info-label">Ends In:</span>
                 <span id="eventTimer" class="event-timer">${timeRemaining}</span>
             </div>
         </div>
+    `;
 
+    // Only show ports section if there are ports
+    if (ports.length > 0) {
+        html += `
         <div class="event-ports-container">
             <h4 class="event-ports-title">Participating Ports (${ports.length})</h4>
             <div class="event-ports-grid">
-    `;
+        `;
 
-    capitalizedPorts.forEach((port, index) => {
-        // If this is the last port and the total count is odd, span both columns
-        const isLastAndOdd = (index === capitalizedPorts.length - 1) && (capitalizedPorts.length % 2 !== 0);
-        const fullClass = isLastAndOdd ? ' event-port-item-full' : '';
-        html += `<div class="event-port-item${fullClass}">${port}</div>`;
-    });
+        capitalizedPorts.forEach((port, index) => {
+            // If this is the last port and the total count is odd, span both columns
+            const isLastAndOdd = (index === capitalizedPorts.length - 1) && (capitalizedPorts.length % 2 !== 0);
+            const fullClass = isLastAndOdd ? ' event-port-item-full' : '';
+            html += `<div class="event-port-item${fullClass}">${port}</div>`;
+        });
 
-    html += `
+        html += `
             </div>
         </div>
-    `;
+        `;
+    }
 
     content.innerHTML = html;
 
@@ -228,8 +271,7 @@ export function initEventInfo() {
     if (closeBtn) {
         closeBtn.addEventListener('click', () => {
             const overlay = document.getElementById('eventOverlay');
-            overlay.classList.add('d-none');
-            overlay.classList.remove('d-flex');
+            overlay.classList.add('hidden');
         });
     }
 

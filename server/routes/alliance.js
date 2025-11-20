@@ -336,27 +336,33 @@ router.get('/alliance-members', async (req, res) => {
   }
 
   try {
+    const allianceId = getAllianceId();
+
     // Fetch all 4 stat variations in parallel
     const [baseData, lastSeasonData, last24hData, lifetimeData] = await Promise.all([
       apiCall('/alliance/get-alliance-members', 'POST', {
+        alliance_id: allianceId,
         lifetime_stats: false,
         last_24h_stats: false,
         last_season_stats: false,
         include_last_season_top_contributors: true
       }),
       apiCall('/alliance/get-alliance-members', 'POST', {
+        alliance_id: allianceId,
         lifetime_stats: false,
         last_24h_stats: false,
         last_season_stats: true,
         include_last_season_top_contributors: true
       }),
       apiCall('/alliance/get-alliance-members', 'POST', {
+        alliance_id: allianceId,
         lifetime_stats: false,
         last_24h_stats: true,
         last_season_stats: false,
         include_last_season_top_contributors: true
       }),
       apiCall('/alliance/get-alliance-members', 'POST', {
+        alliance_id: allianceId,
         lifetime_stats: true,
         last_24h_stats: false,
         last_season_stats: false,
@@ -380,9 +386,9 @@ router.get('/alliance-members', async (req, res) => {
         tanker_ops: member.tanker_ops,
         time_last_login: member.time_last_login,
         stats: {
-          last_24h: { contribution: 0, departures: 0 },
-          last_season: { contribution: 0, departures: 0 },
-          lifetime: { contribution: 0, departures: 0 }
+          last_24h: { contribution: null, departures: null },
+          last_season: { contribution: null, departures: null },
+          lifetime: { contribution: null, departures: null }
         }
       });
     });
@@ -391,8 +397,8 @@ router.get('/alliance-members', async (req, res) => {
     last24hData.data.members.forEach(member => {
       if (memberMap.has(member.user_id)) {
         memberMap.get(member.user_id).stats.last_24h = {
-          contribution: member.contribution || 0,
-          departures: member.departures || 0
+          contribution: member.contribution,
+          departures: member.departures
         };
       }
     });
@@ -401,18 +407,19 @@ router.get('/alliance-members', async (req, res) => {
     lastSeasonData.data.members.forEach(member => {
       if (memberMap.has(member.user_id)) {
         memberMap.get(member.user_id).stats.last_season = {
-          contribution: member.contribution || 0,
-          departures: member.departures || 0
+          contribution: member.contribution,
+          departures: member.departures
         };
       }
     });
 
-    // Add lifetime stats
+    // Add lifetime stats (API returns contribution_lifetime and departures_lifetime fields)
     lifetimeData.data.members.forEach(member => {
       if (memberMap.has(member.user_id)) {
+        logger.debug(`[Alliance Members] Lifetime stats for ${member.company_name}: contribution_lifetime=${member.contribution_lifetime}, departures_lifetime=${member.departures_lifetime}`);
         memberMap.get(member.user_id).stats.lifetime = {
-          contribution: member.contribution || 0,
-          departures: member.departures || 0
+          contribution: member.contribution_lifetime,
+          departures: member.departures_lifetime
         };
       }
     });
@@ -645,9 +652,9 @@ router.get('/alliance-members/:id', async (req, res) => {
         tanker_ops: member.tanker_ops,
         time_last_login: member.time_last_login,
         stats: {
-          last_24h: { contribution: 0, departures: 0 },
-          last_season: { contribution: 0, departures: 0 },
-          lifetime: { contribution: 0, departures: 0 }
+          last_24h: { contribution: null, departures: null },
+          last_season: { contribution: null, departures: null },
+          lifetime: { contribution: null, departures: null }
         }
       });
     });
@@ -656,8 +663,8 @@ router.get('/alliance-members/:id', async (req, res) => {
     last24hData.data.members.forEach(member => {
       if (memberMap.has(member.user_id)) {
         memberMap.get(member.user_id).stats.last_24h = {
-          contribution: member.contribution || 0,
-          departures: member.departures || 0
+          contribution: member.contribution,
+          departures: member.departures
         };
       }
     });
@@ -666,18 +673,18 @@ router.get('/alliance-members/:id', async (req, res) => {
     lastSeasonData.data.members.forEach(member => {
       if (memberMap.has(member.user_id)) {
         memberMap.get(member.user_id).stats.last_season = {
-          contribution: member.contribution || 0,
-          departures: member.departures || 0
+          contribution: member.contribution,
+          departures: member.departures
         };
       }
     });
 
-    // Add lifetime stats
+    // Add lifetime stats (API returns contribution_lifetime and departures_lifetime fields)
     lifetimeData.data.members.forEach(member => {
       if (memberMap.has(member.user_id)) {
         memberMap.get(member.user_id).stats.lifetime = {
-          contribution: member.contribution || 0,
-          departures: member.departures || 0
+          contribution: member.contribution_lifetime,
+          departures: member.departures_lifetime
         };
       }
     });

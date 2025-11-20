@@ -654,6 +654,11 @@ function renderHistoryPage() {
           <span>Harbor Fee: $${trip.harbor_fee.toLocaleString()} (${Math.round(feePercentage)}%)${isHighHarborFee ? ` (Threshold: ${harborFeeThreshold}%)` : ''}</span>
         </div>
         ` : ''}
+        ${trip.contribution !== null && trip.contribution !== undefined ? `
+        <div class="history-row">
+          <span>Contribution: +${typeof trip.contribution === 'number' ? trip.contribution.toFixed(2) : trip.contribution}</span>
+        </div>
+        ` : ''}
         <div class="history-row">
           <span>Fuel: ${trip.fuel_used ? Math.round(trip.fuel_used / 1000).toLocaleString() + ' t' : 'N/A'}</span>
         </div>
